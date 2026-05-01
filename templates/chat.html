@@ -324,6 +324,7 @@ socket.on('webrtc_ice_candidate', async (data) => {
     }
 });
 
+// ============ ИСПРАВЛЕННАЯ ФУНКЦИЯ startCall ============
 async function startCall(type) {
     currentCallType = type;
     
@@ -334,6 +335,7 @@ async function startCall(type) {
             : { audio: true, video: false };
         
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('Got local stream, tracks:', localStream.getTracks().map(t => t.kind));
         
         if (type === 'video') {
             document.getElementById('localVideo').srcObject = localStream;
@@ -346,6 +348,14 @@ async function startCall(type) {
         
         // Создаем peerConnection
         createPeerConnection();
+        
+        // FIXED: Добавляем локальные треки в peerConnection (инициатор)
+        localStream.getTracks().forEach(track => {
+            if (peerConnection) {
+                peerConnection.addTrack(track, localStream);
+                console.log('Added track:', track.kind);
+            }
+        });
         
         // Отправляем запрос на звонок
         socket.emit('call_user', {
@@ -367,10 +377,11 @@ async function createAndSendOffer() {
     }
     
     try {
-        // Добавляем локальный поток
-        if (localStream) {
+        // Добавляем локальный поток (если почему-то не добавлен)
+        if (localStream && peerConnection.getSenders().length === 0) {
             localStream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, localStream);
+                console.log('Added track in createAndSendOffer:', track.kind);
             });
         }
         
@@ -388,19 +399,35 @@ async function createAndSendOffer() {
     }
 }
 
+// ============ ИСПРАВЛЕННАЯ ФУНКЦИЯ handleOffer ============
 async function handleOffer(data) {
     if (!peerConnection) {
         createPeerConnection();
     }
     
-    try {
-        // Добавляем локальный поток для ответа
+    // FIXED: Добавляем локальный поток ДО установки remote description
+    if (localStream) {
+        localStream.getTracks().forEach(track => {
+            if (peerConnection) {
+                peerConnection.addTrack(track, localStream);
+                console.log('Added track in handleOffer:', track.kind);
+            }
+        });
+    } else {
+        console.warn('No local stream in handleOffer, waiting...');
+        // Ждем немного, возможно поток еще не готов
+        await new Promise(resolve => setTimeout(resolve, 500));
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, localStream);
+                if (peerConnection) {
+                    peerConnection.addTrack(track, localStream);
+                    console.log('Added track in handleOffer (delayed):', track.kind);
+                }
             });
         }
-        
+    }
+    
+    try {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
@@ -429,17 +456,36 @@ function createPeerConnection() {
         }
     };
     
+    // FIXED: Исправленный обработчик аудио
     peerConnection.ontrack = (event) => {
+        console.log('Got track:', event.track.kind);
+        
         if (event.track.kind === 'video') {
-            document.getElementById('remoteVideo').srcObject = event.streams[0];
+            const remoteVideo = document.getElementById('remoteVideo');
+            remoteVideo.srcObject = event.streams[0];
+            remoteVideo.play().catch(e => console.log('Video play error:', e));
         } else if (event.track.kind === 'audio') {
-            const audioElement = new Audio();
+            // Создаем audio элемент и добавляем в DOM
+            let audioElement = document.getElementById('remoteAudio');
+            if (!audioElement) {
+                audioElement = document.createElement('audio');
+                audioElement.id = 'remoteAudio';
+                audioElement.autoplay = true;
+                document.body.appendChild(audioElement);
+            }
             audioElement.srcObject = event.streams[0];
-            audioElement.play();
+            audioElement.play().catch(e => {
+                console.error('Audio play failed:', e);
+                // Пользователь должен кликнуть куда-нибудь для разрешения
+                document.body.addEventListener('click', () => {
+                    audioElement.play();
+                }, { once: true });
+            });
         }
     };
     
     peerConnection.onconnectionstatechange = () => {
+        console.log('Connection state:', peerConnection.connectionState);
         if (peerConnection.connectionState === 'connected') {
             updateCallStatus('Connected');
         } else if (peerConnection.connectionState === 'disconnected') {
@@ -451,6 +497,7 @@ function createPeerConnection() {
     };
 }
 
+// ============ ИСПРАВЛЕННАЯ ФУНКЦИЯ acceptCall ============
 function acceptCall() {
     socket.emit('accept_call', { call_id: currentCallId });
     updateCallStatus('Connecting...');
@@ -459,9 +506,27 @@ function acceptCall() {
     const buttonsDiv = document.getElementById('callButtons');
     buttonsDiv.innerHTML = '<button class="end-call" onclick="endCall()">End Call</button>';
     
-    // Создаем peerConnection если еще не создан
-    if (!peerConnection && localStream) {
+    // FIXED: Создаем peerConnection если еще не создан
+    if (!peerConnection) {
         createPeerConnection();
+        console.log('Created peerConnection in acceptCall');
+    }
+    
+    // FIXED: Добавляем локальный поток в peerConnection (у отвечающего)
+    if (localStream) {
+        // Проверяем, есть ли уже отправляющие треки
+        if (peerConnection.getSenders().length === 0) {
+            localStream.getTracks().forEach(track => {
+                if (peerConnection) {
+                    peerConnection.addTrack(track, localStream);
+                    console.log('Added track in acceptCall:', track.kind);
+                }
+            });
+        } else {
+            console.log('Tracks already added, senders:', peerConnection.getSenders().length);
+        }
+    } else {
+        console.error('No local stream available when accepting call');
     }
 }
 
@@ -523,6 +588,7 @@ function showIncomingCall(data) {
     navigator.mediaDevices.getUserMedia(constraints)
         .then(stream => {
             localStream = stream;
+            console.log('Got local stream in incoming call, tracks:', stream.getTracks().map(t => t.kind));
             if (data.call_type === 'video') {
                 document.getElementById('localVideo').srcObject = stream;
                 document.getElementById('videoContainer').style.display = 'flex';
@@ -564,6 +630,11 @@ function closeCallModal() {
     document.getElementById('callAvatar').innerHTML = '🎤';
     document.getElementById('localVideo').srcObject = null;
     document.getElementById('remoteVideo').srcObject = null;
+    // Удаляем audio элемент
+    const audioElement = document.getElementById('remoteAudio');
+    if (audioElement) {
+        audioElement.remove();
+    }
 }
 
 function sendMessage() {
