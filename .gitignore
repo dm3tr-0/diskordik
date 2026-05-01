@@ -1,5 +1,7 @@
 /__pycache__
 /extra
 /instance
+/.idea
+/.venv
 
 *.pem

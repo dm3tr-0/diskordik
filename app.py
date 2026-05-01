@@ -2,11 +2,13 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, User, FriendRequest, Message, Call
-from datetime import datetime
+
+from datetime import datetime, timedelta
 import os
-import ssl
 import ipaddress
+
+from models import db, User, FriendRequest, Message, Call
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-this'
@@ -14,19 +16,23 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///discord.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
-# Используем eventlet с правильными настройками
+
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+
 # Создание базы данных
 with app.app_context():
     db.create_all()
+
 
 # Маршруты
 @app.route('/')
@@ -34,6 +40,7 @@ def index():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -56,6 +63,7 @@ def register():
     
     return render_template('register.html')
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -74,10 +82,10 @@ def login():
     
     return render_template('login.html')
 
+
 @app.route('/logout')
 @login_required
 def logout():
-    # Завершаем активные звонки
     active_calls = Call.query.filter(
         ((Call.caller_id == current_user.id) | (Call.receiver_id == current_user.id)),
         Call.status == 'active'
@@ -94,6 +102,7 @@ def logout():
     db.session.commit()
     logout_user()
     return redirect(url_for('login'))
+
 
 @app.route('/dashboard')
 @login_required
@@ -122,6 +131,7 @@ def dashboard():
                          friend_requests=friend_requests,
                          recent_chats=recent_chats)
 
+
 @app.route('/search_users')
 @login_required
 def search_users():
@@ -133,11 +143,10 @@ def search_users():
     
     return jsonify([{'id': u.id, 'username': u.username} for u in users])
 
+
 @app.route('/send_friend_request/<int:user_id>', methods=['POST'])
 @login_required
 def send_friend_request(user_id):
-    receiver = User.query.get_or_404(user_id)
-    
     existing = FriendRequest.query.filter_by(
         from_user_id=current_user.id,
         to_user_id=user_id,
@@ -161,6 +170,7 @@ def send_friend_request(user_id):
     
     return jsonify({'success': True})
 
+
 @app.route('/accept_friend_request/<int:request_id>', methods=['POST'])
 @login_required
 def accept_friend_request(request_id):
@@ -179,6 +189,7 @@ def accept_friend_request(request_id):
     
     return jsonify({'success': True})
 
+
 @app.route('/reject_friend_request/<int:request_id>', methods=['POST'])
 @login_required
 def reject_friend_request(request_id):
@@ -191,6 +202,7 @@ def reject_friend_request(request_id):
     db.session.commit()
     
     return jsonify({'success': True})
+
 
 @app.route('/chat/<int:user_id>')
 @login_required
@@ -207,7 +219,7 @@ def chat(user_id):
     
     return render_template('chat.html', friend=friend, messages=messages)
 
-# WebRTC сигналинг через SocketIO
+
 @socketio.on('connect')
 def handle_connect():
     if current_user.is_authenticated:
@@ -216,12 +228,14 @@ def handle_connect():
         db.session.commit()
         emit('user_status', {'user_id': current_user.id, 'status': 'online'}, broadcast=True)
 
+
 @socketio.on('disconnect')
 def handle_disconnect():
     if current_user.is_authenticated:
         current_user.is_online = False
         db.session.commit()
         emit('user_status', {'user_id': current_user.id, 'status': 'offline'}, broadcast=True)
+
 
 @socketio.on('send_message')
 def handle_send_message(data):
@@ -248,6 +262,7 @@ def handle_send_message(data):
     emit('new_message', message_data, room=f'user_{current_user.id}')
     emit('new_message', message_data, room=f'user_{receiver_id}')
 
+
 @socketio.on('typing')
 def handle_typing(data):
     receiver_id = data['receiver_id']
@@ -258,6 +273,7 @@ def handle_typing(data):
         'username': current_user.username,
         'is_typing': is_typing
     }, room=f'user_{receiver_id}')
+
 
 # WebRTC сигналинг
 @socketio.on('call_user')
@@ -286,6 +302,7 @@ def handle_call_user(data):
     # Отправляем call_id обратно инициатору
     emit('call_initialized', {'call_id': call.id}, room=f'user_{current_user.id}')
 
+
 @socketio.on('accept_call')
 def handle_accept_call(data):
     call_id = data['call_id']
@@ -309,6 +326,7 @@ def handle_accept_call(data):
             'call_id': call_id
         }, room=f'call_{call_id}')
 
+
 @socketio.on('reject_call')
 def handle_reject_call(data):
     call_id = data['call_id']
@@ -322,6 +340,7 @@ def handle_reject_call(data):
         emit('call_rejected', {
             'call_id': call_id
         }, room=f'user_{call.caller_id}')
+
 
 @socketio.on('end_call')
 def handle_end_call(data):
@@ -339,6 +358,7 @@ def handle_end_call(data):
             'call_id': call_id
         }, room=f'call_{call_id}')
 
+
 # WebRTC ICE кандидаты и SDP
 @socketio.on('webrtc_offer')
 def handle_webrtc_offer(data):
@@ -352,6 +372,7 @@ def handle_webrtc_offer(data):
         'call_id': call_id
     }, room=f'user_{target_user}')
 
+
 @socketio.on('webrtc_answer')
 def handle_webrtc_answer(data):
     caller_id = data['caller_id']
@@ -363,6 +384,7 @@ def handle_webrtc_answer(data):
         'receiver_id': current_user.id,
         'call_id': call_id
     }, room=f'user_{caller_id}')
+
 
 @socketio.on('webrtc_ice_candidate')
 def handle_webrtc_ice_candidate(data):
@@ -431,8 +453,8 @@ def generate_self_signed_certificate():
         .issuer_name(issuer)
         .public_key(private_key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow())
-        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
+        .not_valid_before(datetime.utcnow())
+        .not_valid_after(datetime.utcnow() + timedelta(days=365))
         .add_extension(san, critical=False)
         .sign(private_key, hashes.SHA256()))
     
@@ -452,42 +474,37 @@ def generate_self_signed_certificate():
     return cert_file, key_file
 
 
-if __name__ == '__main__':
+def main():
     generate_self_signed_certificate()
-    print("\n" + "="*60)
+
+    print("\n" + "=" * 60)
     print("🎮 Discord Clone Запущен!")
-    print("="*60)
+    print("=" * 60)
     print("\n📌 Доступные адреса:")
     print("   • http://localhost:5000     (чат работает, но ЗВОНКИ НЕ РАБОТАЮТ)")
     print("   • https://localhost:5000    (чат ✅ и звонки ✅ работают)")
-    print("\n⚠️  ВАЖНО: Для звонков используйте https://localhost:5000")
-    print("   Если у вас есть файлы cert.pem и key.pem в папке с проектом,")
-    print("   сервер автоматически запустится в HTTPS режиме.")
-    print("\n💡 Если сертификатов нет, просто создайте их:")
-    print("   1. Запустите PowerShell от имени администратора")
-    print("   2. Выполните команду из инструкции выше")
-    print("="*60 + "\n")
-    
-    # Проверяем наличие SSL сертификатов
+    print("=" * 60 + "\n")
+
     if os.path.exists('cert.pem') and os.path.exists('key.pem'):
         print("✅ Найдены SSL сертификаты! Запуск в HTTPS режиме...")
-        print("🔒 Откройте: https://localhost:5000\n")
-        
-        # Для eventlet используем другой подход с SSL
+
         try:
-            # Пробуем запустить с SSL через eventlet
-            socketio.run(app, host='0.0.0.0', port=5000, debug=True, 
-                        keyfile='key.pem', certfile='cert.pem')
+            socketio.run(
+                app,
+                host='0.0.0.0',
+                port=5000,
+                debug=True,
+                keyfile='key.pem',
+                certfile='cert.pem'
+            )
+
         except TypeError:
-            # Если не работает, запускаем обычный HTTP с предупреждением
             print("⚠️  Не удалось запустить HTTPS режим. Запуск в HTTP режиме...")
-            print("⚠️  Для звонков используйте только localhost!")
             socketio.run(app, host='0.0.0.0', port=5000, debug=True)
     else:
         print("⚠️  SSL сертификаты не найдены. Запуск в HTTP режиме...")
-        print("⚠️  Для работы звонков используйте http://localhost:5000")
-        print("📝 Инструкция по созданию сертификатов:")
-        print("   1. Запустите PowerShell от имени администратора")
-        print("   2. Выполните:")
-        print("      New-SelfSignedCertificate -DnsName 'localhost' -CertStoreLocation 'cert:\\LocalMachine\\My' -NotAfter (Get-Date).AddYears(10)\n")
         socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+
+
+if __name__ == '__main__':
+    main()

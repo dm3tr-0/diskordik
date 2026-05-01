@@ -2,6 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import datetime
 
+
 db = SQLAlchemy()
 
 # Определяем вспомогательные таблицы ДО определения классов
@@ -9,6 +10,7 @@ user_friends = db.Table('user_friends',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
     db.Column('friend_id', db.Integer, db.ForeignKey('user.id'), primary_key=True)
 )
+
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -74,6 +76,7 @@ class User(UserMixin, db.Model):
         lazy='dynamic'
     )
 
+
 class FriendRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     from_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -83,6 +86,7 @@ class FriendRequest(db.Model):
     
     __table_args__ = (db.UniqueConstraint('from_user_id', 'to_user_id', name='unique_request'),)
 
+
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.Text, nullable=False)
@@ -90,6 +94,7 @@ class Message(db.Model):
     receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
+
 
 # Новая модель для звонков
 class Call(db.Model):
