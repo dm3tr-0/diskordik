@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="sidebar">
+        <div class="user-info">
+            <h3>{{ current_user.username }}</h3>
+            <a href="/logout" class="logout-btn">Logout</a>
+        </div>
+        
+        <div class="search-section">
+            <input type="text" id="search" placeholder="Search users...">
+            <div id="search-results"></div>
+        </div>
+        
+        <div class="friend-requests">
+            <h4>Friend Requests</h4>
+            {% for request in friend_requests %}
+            <div class="friend-request">
+                <span>{{ request.from_user.username }}</span>
+                <button onclick="acceptRequest({{ request.id }})">Accept</button>
+                <button onclick="rejectRequest({{ request.id }})">Reject</button>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="friends-list">
+            <h4>Friends ({{ friends|length }})</h4>
+            {% for friend in friends %}
+            <div class="friend-item" onclick="window.location.href='/chat/{{ friend.id }}'">
+                <span class="friend-status {% if friend.is_online %}online{% endif %}"></span>
+                <span>{{ friend.username }}</span>
+                {% if friend.is_online %}
+                <span style="margin-left: auto; font-size: 12px;">🟢</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="chat-area">
+        <div class="welcome-message">
+            <h2>Welcome to Discord Clone!</h2>
+            <p>Select a friend to start chatting or <br> click on their profile to start a voice/video call</p>
+            <div style="margin-top: 20px;">
+                <p>✨ Features:</p>
+                <ul style="text-align: left;">
+                    <li>Real-time messaging</li>
+                    <li>Voice calls</li>
+                    <li>Video calls</li>
+                    <li>Friend requests</li>
+                    <li>Online status</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function acceptRequest(requestId) {
+    fetch(`/accept_friend_request/${requestId}`, {method: 'POST'})
+        .then(() => location.reload());
+}
+
+function rejectRequest(requestId) {
+    fetch(`/reject_friend_request/${requestId}`, {method: 'POST'})
+        .then(() => location.reload());
+}
+
+document.getElementById('search').addEventListener('input', function(e) {
+    const query = e.target.value;
+    if (query.length < 2) return;
+    
+    fetch(`/search_users?q=${query}`)
+        .then(res => res.json())
+        .then(users => {
+            const results = document.getElementById('search-results');
+            results.innerHTML = users.map(user => `
+                <div class="search-result">
+                    <span>${user.username}</span>
+                    <button onclick="sendRequest(${user.id})">Add Friend</button>
+                </div>
+            `).join('');
+        });
+});
+
+function sendRequest(userId) {
+    fetch(`/send_friend_request/${userId}`, {method: 'POST'})
+        .then(() => {
+            alert('Friend request sent!');
+            document.getElementById('search-results').innerHTML = '';
+        });
+}
+
+// WebSocket для статусов
+const socket = io();
+socket.on('user_status', (data) => {
+    // Обновляем статус друга в реальном времени
+    const friendItems = document.querySelectorAll('.friend-item');
+    friendItems.forEach(item => {
+        const username = item.querySelector('span:not(.friend-status)').textContent;
+        // Здесь можно обновить статус, если нужно
+    });
+});
+</script>
+{% endblock %}
