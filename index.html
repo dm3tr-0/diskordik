@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diskordik · self‑hosted discord</title>
+    <meta name="description" content="Diskordik — легковесный, self‑hosted мессенджер для команды. Альтернатива Discord, которую вы контролируете.">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0c10;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Fira Code', monospace;
+            color: #e6edf3;
+            line-height: 1.5;
+            padding: 2rem 1rem;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid #30363d;
+        }
+        .logo-icon {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, #5865F2, #4752c4);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 0 20px rgba(88, 101, 242, 0.3);
+        }
+        .header-info h1 {
+            font-size: 2.2rem;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff, #5865F2);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .badge {
+            display: inline-block;
+            background: #1f2428;
+            border: 1px solid #5865F2;
+            border-radius: 20px;
+            padding: 0.2rem 0.8rem;
+            font-size: 0.75rem;
+            color: #5865F2;
+            margin-top: 0.5rem;
+        }
+        .version {
+            color: #8b949e;
+            font-size: 0.8rem;
+            margin-top: 0.3rem;
+        }
+        .status-banner {
+            background: linear-gradient(135deg, rgba(88, 101, 242, 0.1), rgba(71, 82, 196, 0.1));
+            border: 1px solid rgba(88, 101, 242, 0.3);
+            border-radius: 16px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .status-text {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: #3fb950;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+        .status-text span:first-child {
+            font-weight: 600;
+            color: #3fb950;
+        }
+        .github-link {
+            background: #1f2428;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            color: #e6edf3;
+            text-decoration: none;
+            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: border-color 0.2s;
+        }
+        .github-link:hover {
+            border-color: #5865F2;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .card:hover {
+            border-color: #5865F2;
+            transform: translateY(-2px);
+        }
+        .card h3 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: #5865F2;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            margin-bottom: 0.75rem;
+            padding-left: 1.5rem;
+            position: relative;
+            font-size: 0.9rem;
+        }
+        .feature-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #3fb950;
+        }
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .tech-tag {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 16px;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.7rem;
+            font-family: monospace;
+            color: #c9d1d9;
+        }
+        .tech-tag.highlight {
+            border-color: #5865F2;
+            color: #5865F2;
+        }
+        .quick-start {
+            background: #0d1117;
+            border-radius: 10px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+            margin-top: 1rem;
+        }
+        footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #21262d;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #8b949e;
+        }
+        footer a {
+            color: #8b949e;
+            text-decoration: none;
+        }
+        footer a:hover {
+            color: #5865F2;
+        }
+        @media (max-width: 600px) {
+            .header { flex-direction: column; text-align: center; }
+            .grid { grid-template-columns: 1fr; }
+            .status-banner { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-icon">📡</div>
+            <div class="header-info">
+                <h1>Diskordik</h1>
+                <span class="badge">self-hosted discord · open source</span>
+                <div class="version">· Python</div>
+            </div>
+        </div>
+
+        <div class="status-banner">
+            <div class="status-text">
+                <div class="status-dot"></div>
+                <span>Работает — уже можно юзать</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <a href="https://github.com/dm3tr-0/diskordik" class="github-link">🐙 GitHub</a>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>📡 что это?</h3>
+                <p style="margin-bottom: 1rem;"><strong>Diskordik</strong> — самоподнимаемый мессенджер для команды. Как Discord, но с сервером под вашим контролем.</p>
+                <p style="color: #8b949e; font-size: 0.85rem;">Никаких „облаков“, никаких „премиумов“. Поднимаете на своём сервере — и пользуетесь.</p>
+            </div>
+            <div class="card">
+                <h3>✨ фичи</h3>
+                <ul class="feature-list">
+                    <li>Текстовые каналы (как в Discord)</li>
+                    <li>Голосовые каналы</li>
+                    <li>Self-hosted — данные только ваши</li>
+                    <li>Адаптивный веб‑интерфейс</li>
+                    <li>Open source — можно допилить под себя</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>⚙️ технологии</h3>
+                <div class="tech-stack">
+                    <span class="tech-tag highlight">Python 3</span>
+                    <span class="tech-tag highlight">Flask</span>
+                    <span class="tech-tag highlight">SQLite</span>
+                    <span class="tech-tag highlight">WebRTC</span>
+                    <span class="tech-tag highlight">HTML5/CSS3</span>
+                </div>
+                <div class="quick-start">
+                    <code>git clone https://github.com/dm3tr-0/diskordik.git<br>
+                    cd diskordik<br>
+                    pip install -r requirements.txt<br>
+                    python app.py</code>
+                </div>
+            </div>
+            <div class="card">
+                <h3>📦 репозиторий</h3>
+                <div class="tech-stack" style="margin-bottom: 1rem;">
+                    <span class="tech-tag">Python 44.8%</span>
+                    <span class="tech-tag">HTML 48.7%</span>
+                    <span class="tech-tag">CSS 6.5%</span>
+                </div>
+                <p style="margin: 0.5rem 0 1rem;"><strong>Contributors:</strong> <a href="https://github.com/alfadefender" style="color:#5865F2;">alfadefender</a>, dm3tr0</p>
+
+            </div>
+        </div>
+
+        <footer>
+            dm3tr0 · пентестер, исследователь безопасности · <a href="https://github.com/dm3tr-0">GitHub</a>
+            <br><br>
+            ⚠️ Дискордик — не официальный клиент Discord и не аффилирован с Discord Inc. Просто для своих.
+        </footer>
+    </div>
+</body>
+</html>
