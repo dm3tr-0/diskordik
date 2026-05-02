@@ -26,5 +26,7 @@
 ```bash
 git clone https://github.com/dm3tr-0/diskordik.git
 cd diskordik
+py -3.10 -m venv venv
+venv/Scripts/Activate.ps1
 pip install -r requirements.txt
 python app.py
