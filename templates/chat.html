@@ -226,8 +226,7 @@ let localStream = null;
 // Конфигурация STUN серверов (для работы через NAT)
 const configuration = {
     iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:0.0.0.0:3478' }
     ]
 };
 

@@ -1,3 +1,5 @@
+import ssl
+
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -6,8 +8,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import os
 import ipaddress
+from threading import Thread
 
 from models import db, User, FriendRequest, Message, Call
+from stun import STUNServer
 
 
 app = Flask(__name__)
@@ -22,6 +26,8 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+server = STUNServer(host='0.0.0.0', port=3478)
 
 
 @login_manager.user_loader
@@ -474,19 +480,34 @@ def generate_self_signed_certificate():
     return cert_file, key_file
 
 
+def start_stun_server():
+    """
+    Запускает STUN-сервер
+    """
+    try:
+        server.start()
+    except KeyboardInterrupt:
+        print("\n🛑 STUN Server stopped")
+        server.stop()
+
+
 def main():
+    # Запуск STUN-сервера в отдельном потоке
+    Thread(target=start_stun_server, daemon=True).start()
+
+    # Подгрузка сертификатов
     generate_self_signed_certificate()
 
     print("\n" + "=" * 60)
-    print("🎮 Discord Clone Запущен!")
+    print("Discord Clone Запущен!")
     print("=" * 60)
-    print("\n📌 Доступные адреса:")
+    print("\nДоступные адреса:")
     print("   • http://localhost:5000     (чат работает, но ЗВОНКИ НЕ РАБОТАЮТ)")
-    print("   • https://localhost:5000    (чат ✅ и звонки ✅ работают)")
+    print("   • https://localhost:5000    (чат и звонки работают)")
     print("=" * 60 + "\n")
 
     if os.path.exists('cert.pem') and os.path.exists('key.pem'):
-        print("✅ Найдены SSL сертификаты! Запуск в HTTPS режиме...")
+        print("Найдены SSL сертификаты! Запуск в HTTPS режиме...")
 
         try:
             socketio.run(
@@ -499,10 +520,10 @@ def main():
             )
 
         except TypeError:
-            print("⚠️  Не удалось запустить HTTPS режим. Запуск в HTTP режиме...")
+            print(" Не удалось запустить HTTPS режим. Запуск в HTTP режиме...")
             socketio.run(app, host='0.0.0.0', port=5000, debug=True)
     else:
-        print("⚠️  SSL сертификаты не найдены. Запуск в HTTP режиме...")
+        print(" SSL сертификаты не найдены. Запуск в HTTP режиме...")
         socketio.run(app, host='0.0.0.0', port=5000, debug=True)
 
 
