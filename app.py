@@ -138,6 +138,64 @@ def dashboard():
                          recent_chats=recent_chats)
 
 
+@app.route('/get_messages/<int:user_id>')
+@login_required
+def get_messages(user_id):
+    messages = Message.query.filter(
+        ((Message.sender_id == current_user.id) & (Message.receiver_id == user_id)) |
+        ((Message.sender_id == user_id) & (Message.receiver_id == current_user.id))
+    ).order_by(Message.timestamp.asc()).all()
+    
+    return jsonify({
+        'messages': [{
+            'id': m.id,
+            'content': m.content,
+            'sender_id': m.sender_id,
+            'sender_name': m.sender.username,
+            'timestamp': m.timestamp.strftime('%H:%M'),
+            'receiver_id': m.receiver_id
+        } for m in messages]
+    })
+
+
+@app.route('/get_friends_list')
+@login_required
+def get_friends_list():
+    friends = current_user.friends.all()
+    friends_data = []
+    
+    for friend in friends:
+        last_message = Message.query.filter(
+            ((Message.sender_id == current_user.id) & (Message.receiver_id == friend.id)) |
+            ((Message.sender_id == friend.id) & (Message.receiver_id == current_user.id))
+        ).order_by(Message.timestamp.desc()).first()
+        
+        friends_data.append({
+            'id': friend.id,
+            'username': friend.username,
+            'is_online': friend.is_online,
+            'last_message': last_message.content[:30] + '...' if last_message and len(last_message.content) > 30 else (last_message.content if last_message else None)
+        })
+    
+    return jsonify({'friends': friends_data})
+
+
+@app.route('/get_friend_requests')
+@login_required
+def get_friend_requests():
+    friend_requests = FriendRequest.query.filter_by(
+        to_user_id=current_user.id, 
+        status='pending'
+    ).all()
+    
+    return jsonify({
+        'requests': [{
+            'id': r.id,
+            'username': r.from_user.username
+        } for r in friend_requests]
+    })
+
+
 @app.route('/search_users')
 @login_required
 def search_users():

@@ -1,108 +1,585 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard{% endblock %}
+{% block title %}Discord Clone - Dashboard{% endblock %}
 
 {% block content %}
-<div class="dashboard">
+<div class="discord-layout">
+    <!-- Левая панель - список друзей и поиск -->
     <div class="sidebar">
         <div class="user-info">
             <h3>{{ current_user.username }}</h3>
-            <a href="/logout" class="logout-btn">Logout</a>
+            <a href="/logout" class="logout-btn">Выйти</a>
         </div>
         
         <div class="search-section">
-            <input type="text" id="search" placeholder="Search users...">
+            <input type="text" id="search" placeholder="Поиск пользователей...">
             <div id="search-results"></div>
         </div>
         
-        <div class="friend-requests">
-            <h4>Friend Requests</h4>
-            {% for request in friend_requests %}
-            <div class="friend-request">
-                <span>{{ request.from_user.username }}</span>
-                <button onclick="acceptRequest({{ request.id }})">Accept</button>
-                <button onclick="rejectRequest({{ request.id }})">Reject</button>
+        <div class="friend-requests" id="friendRequests">
+            <h4>Заявки в друзья <span id="friendRequestsCount">({{ friend_requests|length }})</span></h4>
+            <div id="friendRequestsList">
+                {% for request in friend_requests %}
+                <div class="friend-request" id="request-{{ request.id }}">
+                    <span>{{ request.from_user.username }}</span>
+                    <div>
+                        <button onclick="acceptRequest({{ request.id }})">✓</button>
+                        <button onclick="rejectRequest({{ request.id }})">✗</button>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
         
-        <div class="friends-list">
-            <h4>Friends ({{ friends|length }})</h4>
-            {% for friend in friends %}
-            <div class="friend-item" onclick="window.location.href='/chat/{{ friend.id }}'">
-                <span class="friend-status {% if friend.is_online %}online{% endif %}"></span>
-                <span>{{ friend.username }}</span>
-                {% if friend.is_online %}
-                <span style="margin-left: auto; font-size: 12px;">🟢</span>
-                {% endif %}
+        <div class="friends-section">
+            <h4>Друзья</h4>
+            <div id="friendsList">
+                {% for chat in recent_chats %}
+                <div class="friend-item" data-friend-id="{{ chat.friend.id }}" onclick="openChat({{ chat.friend.id }}, '{{ chat.friend.username }}')">
+                    <span class="friend-status {% if chat.friend.is_online %}online{% endif %}"></span>
+                    <div class="friend-info">
+                        <span class="friend-name">{{ chat.friend.username }}</span>
+                        {% if chat.last_message %}
+                        <span class="last-message">{{ chat.last_message.content[:30] }}{% if chat.last_message.content|length > 30 %}...{% endif %}</span>
+                        {% endif %}
+                    </div>
+                    {% if chat.friend.is_online %}
+                    <span class="online-indicator">🟢</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     </div>
     
-    <div class="chat-area">
-        <div class="welcome-message">
-            <h2>Welcome to Discord Clone!</h2>
-            <p>Select a friend to start chatting or <br> click on their profile to start a voice/video call</p>
-            <div style="margin-top: 20px;">
-                <p>✨ Features:</p>
-                <ul style="text-align: left;">
-                    <li>Real-time messaging</li>
-                    <li>Voice calls</li>
-                    <li>Video calls</li>
-                    <li>Friend requests</li>
-                    <li>Online status</li>
-                </ul>
+    <!-- Правая панель - чат -->
+    <div class="chat-area" id="chatArea">
+        <div class="welcome-screen" id="welcomeScreen">
+            <div class="welcome-content">
+                <h2>Добро пожаловать в Discord Clone!</h2>
+                <p>Выберите друга слева, чтобы начать общение</p>
+                <div class="features">
+                    <h3>Возможности:</h3>
+                    <ul>
+                        <li>💬 Мгновенные сообщения</li>
+                        <li>📞 Голосовые звонки</li>
+                        <li>📹 Видеозвонки</li>
+                        <li>👥 Заявки в друзья</li>
+                        <li>🟢 Статус онлайн</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chat-container" id="chatContainer" style="display: none;">
+            <div class="chat-header">
+                <div class="chat-header-left">
+                    <button class="back-btn" onclick="closeChat()">←</button>
+                    <span class="friend-status" id="chatFriendStatus"></span>
+                    <h3 id="chatFriendName"></h3>
+                </div>
+                <div class="call-controls">
+                    <button class="call-btn audio-call" onclick="startCall('audio')" title="Голосовой звонок">
+                        📞
+                    </button>
+                    <button class="call-btn video-call" onclick="startCall('video')" title="Видеозвонок">
+                        📹
+                    </button>
+                </div>
+            </div>
+            
+            <div class="messages" id="messages"></div>
+            
+            <div class="typing-indicator" id="typingIndicator"></div>
+            
+            <div class="message-input">
+                <input type="text" id="messageInput" placeholder="Напишите сообщение..." autocomplete="off">
+                <button onclick="sendMessage()">Отправить</button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
+// Глобальные переменные
+let currentUserId = {{ current_user.id }};
+let currentChatId = null;
+let currentChatUsername = null;
+let isTyping = false;
+let typingTimeout;
+
+// Ждем загрузки socket
+document.addEventListener('DOMContentLoaded', function() {
+    // Ждем пока socket инициализируется
+    if (socket) {
+        setupSocketListeners();
+    } else {
+        const checkSocket = setInterval(() => {
+            if (socket) {
+                clearInterval(checkSocket);
+                setupSocketListeners();
+            }
+        }, 100);
+    }
+    
+    setupSearchListeners();
+    setupMessageInput();
+    loadFriendsList();
+    loadFriendRequests();
+    
+    // Проверяем, есть ли сохраненный открытый чат
+    const savedChatId = sessionStorage.getItem('openChatId');
+    if (savedChatId) {
+        const savedUsername = sessionStorage.getItem('openChatUsername');
+        if (savedUsername) {
+            openChat(parseInt(savedChatId), savedUsername);
+        }
+    }
+});
+
+function setupSocketListeners() {
+    if (!socket) return;
+    
+    // Получение новых сообщений
+    socket.on('new_message', (data) => {
+        console.log('New message received:', data);
+        
+        // Всегда добавляем сообщение в текущий чат, если оно для него
+        if (currentChatId && (data.sender_id === currentChatId || data.sender_id === currentUserId)) {
+            addMessage(data);
+        }
+        
+        // Обновляем список друзей для отображения последнего сообщения
+        updateFriendsListWithNewMessage(data);
+    });
+    
+    // Индикатор печати
+    socket.on('user_typing', (data) => {
+        if (currentChatId === data.user_id) {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) {
+                if (data.is_typing) {
+                    indicator.textContent = `${data.username} печатает...`;
+                } else {
+                    indicator.textContent = '';
+                }
+            }
+        }
+    });
+    
+    // Обновление статуса пользователей
+    socket.on('user_status', (data) => {
+        updateUserStatus(data.user_id, data.status);
+    });
+    
+    // Уведомления о заявках в друзья
+    socket.on('friend_request_notification', (data) => {
+        showNotification('Новая заявка в друзья', `Пользователь ${data.from_user} хочет добавить вас в друзья`);
+        loadFriendRequests();
+    });
+}
+
+function setupSearchListeners() {
+    const searchInput = document.getElementById('search');
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            const query = e.target.value.trim();
+            const resultsDiv = document.getElementById('search-results');
+            
+            if (query.length < 2) {
+                resultsDiv.innerHTML = '';
+                return;
+            }
+            
+            // Добавляем индикатор загрузки
+            resultsDiv.innerHTML = '<div class="search-loading">Поиск...</div>';
+            
+            fetch(`/search_users?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(users => {
+                    if (users.length === 0) {
+                        resultsDiv.innerHTML = '<div class="no-results">Пользователи не найдены</div>';
+                    } else {
+                        resultsDiv.innerHTML = users.map(user => `
+                            <div class="search-result">
+                                <span>${escapeHtml(user.username)}</span>
+                                <button onclick="sendFriendRequest(${user.id})">Добавить</button>
+                            </div>
+                        `).join('');
+                    }
+                })
+                .catch(err => {
+                    console.error('Search error:', err);
+                    resultsDiv.innerHTML = '<div class="error-message">Ошибка поиска</div>';
+                });
+        });
+    }
+}
+
+function setupMessageInput() {
+    const input = document.getElementById('messageInput');
+    if (!input) return;
+    
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    input.addEventListener('input', () => {
+        if (currentChatId && socket) {
+            if (!isTyping) {
+                isTyping = true;
+                socket.emit('typing', {
+                    receiver_id: currentChatId,
+                    is_typing: true
+                });
+            }
+            
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                isTyping = false;
+                if (socket) {
+                    socket.emit('typing', {
+                        receiver_id: currentChatId,
+                        is_typing: false
+                    });
+                }
+            }, 1000);
+        }
+    });
+}
+
+function loadFriendsList() {
+    fetch('/get_friends_list')
+        .then(res => res.json())
+        .then(data => {
+            const friendsList = document.getElementById('friendsList');
+            if (friendsList) {
+                if (data.friends.length === 0) {
+                    friendsList.innerHTML = '<div class="no-friends">У вас пока нет друзей. Добавьте кого-нибудь через поиск!</div>';
+                } else {
+                    friendsList.innerHTML = data.friends.map(friend => `
+                        <div class="friend-item" data-friend-id="${friend.id}" onclick="openChat(${friend.id}, '${escapeHtml(friend.username)}')">
+                            <span class="friend-status ${friend.is_online ? 'online' : ''}"></span>
+                            <div class="friend-info">
+                                <span class="friend-name">${escapeHtml(friend.username)}</span>
+                                ${friend.last_message ? `<span class="last-message">${escapeHtml(friend.last_message)}</span>` : ''}
+                            </div>
+                            ${friend.is_online ? '<span class="online-indicator">🟢</span>' : ''}
+                        </div>
+                    `).join('');
+                }
+            }
+        });
+}
+
+function openChat(friendId, username) {
+    currentChatId = friendId;
+    currentChatUsername = username;
+    
+    // Сохраняем состояние
+    sessionStorage.setItem('openChatId', friendId);
+    sessionStorage.setItem('openChatUsername', username);
+    
+    // Обновляем UI
+    const welcomeScreen = document.getElementById('welcomeScreen');
+    const chatContainer = document.getElementById('chatContainer');
+    const chatFriendName = document.getElementById('chatFriendName');
+    const chatFriendStatus = document.getElementById('chatFriendStatus');
+    
+    if (welcomeScreen) welcomeScreen.style.display = 'none';
+    if (chatContainer) chatContainer.style.display = 'flex';
+    if (chatFriendName) chatFriendName.textContent = username;
+    
+    // Получаем статус друга
+    const friendItem = document.querySelector(`.friend-item[data-friend-id="${friendId}"]`);
+    const isOnline = friendItem ? friendItem.querySelector('.friend-status.online') !== null : false;
+    if (chatFriendStatus) {
+        chatFriendStatus.className = `friend-status ${isOnline ? 'online' : ''}`;
+    }
+    
+    // Подсвечиваем активный чат в списке
+    document.querySelectorAll('.friend-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    if (friendItem) {
+        friendItem.classList.add('active');
+    }
+    
+    // Загружаем сообщения
+    loadMessages(friendId);
+    
+    // Очищаем индикатор печати
+    const typingIndicator = document.getElementById('typingIndicator');
+    if (typingIndicator) typingIndicator.textContent = '';
+    
+    // Фокусируемся на поле ввода
+    const messageInput = document.getElementById('messageInput');
+    if (messageInput) messageInput.focus();
+}
+
+function closeChat() {
+    currentChatId = null;
+    currentChatUsername = null;
+    
+    // Очищаем сохраненное состояние
+    sessionStorage.removeItem('openChatId');
+    sessionStorage.removeItem('openChatUsername');
+    
+    // Обновляем UI
+    const welcomeScreen = document.getElementById('welcomeScreen');
+    const chatContainer = document.getElementById('chatContainer');
+    const messagesDiv = document.getElementById('messages');
+    const typingIndicator = document.getElementById('typingIndicator');
+    
+    if (welcomeScreen) welcomeScreen.style.display = 'flex';
+    if (chatContainer) chatContainer.style.display = 'none';
+    if (messagesDiv) messagesDiv.innerHTML = '';
+    if (typingIndicator) typingIndicator.textContent = '';
+    
+    // Убираем подсветку
+    document.querySelectorAll('.friend-item').forEach(item => {
+        item.classList.remove('active');
+    });
+}
+
+function loadMessages(friendId) {
+    fetch(`/get_messages/${friendId}`)
+        .then(res => res.json())
+        .then(data => {
+            const messagesDiv = document.getElementById('messages');
+            if (messagesDiv) {
+                messagesDiv.innerHTML = '';
+                
+                data.messages.forEach(message => {
+                    addMessage(message);
+                });
+                
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error('Error loading messages:', err));
+}
+
+function addMessage(data) {
+    const messagesDiv = document.getElementById('messages');
+    if (!messagesDiv) return;
+    
+    const messageDiv = document.createElement('div');
+    
+    // Проверяем, отправитель ли текущий пользователь
+    const isSent = data.sender_id === currentUserId;
+    const senderName = isSent ? 'Вы' : (data.sender_name || currentChatUsername);
+    
+    messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+    messageDiv.innerHTML = `
+        <div class="message-header">
+            <strong>${escapeHtml(senderName)}</strong>
+            <small>${data.timestamp || new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>
+        </div>
+        <div class="message-content">${escapeHtml(data.content)}</div>
+    `;
+    
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    if (!input) return;
+    
+    const content = input.value.trim();
+    
+    if (content && currentChatId && socket) {
+        console.log('Sending message:', { receiver_id: currentChatId, content: content });
+        
+        // Отправляем сообщение на сервер
+        socket.emit('send_message', {
+            receiver_id: currentChatId,
+            content: content
+        });
+        
+        // Очищаем поле ввода
+        input.value = '';
+        isTyping = false;
+        
+        // Отправляем сигнал, что закончили печатать
+        socket.emit('typing', {
+            receiver_id: currentChatId,
+            is_typing: false
+        });
+        
+        // НЕ добавляем сообщение локально - ждем от сервера
+    }
+}
+
+function updateFriendsListWithNewMessage(data) {
+    const friendId = data.sender_id === currentUserId ? data.receiver_id : data.sender_id;
+    const friendItem = document.querySelector(`.friend-item[data-friend-id="${friendId}"]`);
+    
+    if (friendItem) {
+        let lastMessageSpan = friendItem.querySelector('.last-message');
+        const messagePreview = data.content.length > 30 ? data.content.substring(0, 30) + '...' : data.content;
+        
+        if (lastMessageSpan) {
+            lastMessageSpan.textContent = messagePreview;
+        } else {
+            const friendInfo = friendItem.querySelector('.friend-info');
+            if (friendInfo) {
+                const span = document.createElement('span');
+                span.className = 'last-message';
+                span.textContent = messagePreview;
+                friendInfo.appendChild(span);
+            }
+        }
+        
+        // Перемещаем друга вверх списка (как в мессенджерах)
+        const friendsList = document.getElementById('friendsList');
+        if (friendsList && friendItem.parentNode === friendsList) {
+            friendsList.removeChild(friendItem);
+            friendsList.insertBefore(friendItem, friendsList.firstChild);
+        }
+    }
+}
+
+function updateUserStatus(userId, status) {
+    const friendItem = document.querySelector(`.friend-item[data-friend-id="${userId}"]`);
+    if (friendItem) {
+        const statusSpan = friendItem.querySelector('.friend-status');
+        const onlineIndicator = friendItem.querySelector('.online-indicator');
+        
+        if (status === 'online') {
+            if (statusSpan) statusSpan.classList.add('online');
+            if (!onlineIndicator) {
+                const indicator = document.createElement('span');
+                indicator.className = 'online-indicator';
+                indicator.textContent = '🟢';
+                friendItem.appendChild(indicator);
+            }
+        } else {
+            if (statusSpan) statusSpan.classList.remove('online');
+            if (onlineIndicator) {
+                onlineIndicator.remove();
+            }
+        }
+        
+        // Обновляем статус в шапке чата если открыт чат с этим пользователем
+        if (currentChatId === userId) {
+            const chatStatus = document.getElementById('chatFriendStatus');
+            if (chatStatus) {
+                chatStatus.className = `friend-status ${status === 'online' ? 'online' : ''}`;
+            }
+        }
+    }
+}
+
+// Функции для заявок в друзья
+function sendFriendRequest(userId) {
+    fetch(`/send_friend_request/${userId}`, {method: 'POST'})
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const results = document.getElementById('search-results');
+                if (results) {
+                    results.innerHTML = '<div class="success-message">Заявка отправлена!</div>';
+                    setTimeout(() => {
+                        results.innerHTML = '';
+                        const searchInput = document.getElementById('search');
+                        if (searchInput) searchInput.value = '';
+                    }, 2000);
+                }
+            } else if (data.error) {
+                showNotification('Ошибка', data.error);
+            }
+        })
+        .catch(err => console.error('Error sending friend request:', err));
+}
+
 function acceptRequest(requestId) {
     fetch(`/accept_friend_request/${requestId}`, {method: 'POST'})
-        .then(() => location.reload());
+        .then(() => {
+            loadFriendRequests();
+            loadFriendsList();
+            showNotification('Заявка принята', 'Пользователь добавлен в друзья');
+        })
+        .catch(err => console.error('Error accepting request:', err));
 }
 
 function rejectRequest(requestId) {
     fetch(`/reject_friend_request/${requestId}`, {method: 'POST'})
-        .then(() => location.reload());
-}
-
-document.getElementById('search').addEventListener('input', function(e) {
-    const query = e.target.value;
-    if (query.length < 2) return;
-    
-    fetch(`/search_users?q=${query}`)
-        .then(res => res.json())
-        .then(users => {
-            const results = document.getElementById('search-results');
-            results.innerHTML = users.map(user => `
-                <div class="search-result">
-                    <span>${user.username}</span>
-                    <button onclick="sendRequest(${user.id})">Add Friend</button>
-                </div>
-            `).join('');
-        });
-});
-
-function sendRequest(userId) {
-    fetch(`/send_friend_request/${userId}`, {method: 'POST'})
         .then(() => {
-            alert('Friend request sent!');
-            document.getElementById('search-results').innerHTML = '';
+            loadFriendRequests();
+        })
+        .catch(err => console.error('Error rejecting request:', err));
+}
+
+function loadFriendRequests() {
+    fetch('/get_friend_requests')
+        .then(res => res.json())
+        .then(data => {
+            const requestsList = document.getElementById('friendRequestsList');
+            const requestsCount = document.getElementById('friendRequestsCount');
+            
+            if (requestsCount) {
+                requestsCount.textContent = `(${data.requests.length})`;
+            }
+            
+            if (requestsList) {
+                if (data.requests.length === 0) {
+                    requestsList.innerHTML = '<div class="no-requests">Нет новых заявок</div>';
+                } else {
+                    requestsList.innerHTML = data.requests.map(request => `
+                        <div class="friend-request" id="request-${request.id}">
+                            <span>${escapeHtml(request.username)}</span>
+                            <div>
+                                <button onclick="acceptRequest(${request.id})" title="Принять">✓</button>
+                                <button onclick="rejectRequest(${request.id})" title="Отклонить">✗</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            }
         });
 }
 
-// WebSocket для статусов
-const socket = io();
-socket.on('user_status', (data) => {
-    // Обновляем статус друга в реальном времени
-    const friendItems = document.querySelectorAll('.friend-item');
-    friendItems.forEach(item => {
-        const username = item.querySelector('span:not(.friend-status)').textContent;
-        // Здесь можно обновить статус, если нужно
-    });
-});
+function showNotification(title, message) {
+    // Простая реализация уведомления
+    if (Notification.permission === "granted") {
+        new Notification(title, { body: message });
+    } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+            if (permission === "granted") {
+                new Notification(title, { body: message });
+            }
+        });
+    }
+    
+    // Также показываем визуальное уведомление в DOM
+    const notification = document.createElement('div');
+    notification.className = 'toast-notification';
+    notification.innerHTML = `
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(message)}</p>
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 5000);
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Запрашиваем разрешение на уведомления при загрузке
+if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+    Notification.requestPermission();
+}
 </script>
 {% endblock %}

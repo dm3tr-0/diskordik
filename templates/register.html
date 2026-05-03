@@ -1,15 +1,41 @@
 {% extends "base.html" %}
 
-{% block title %}Register{% endblock %}
+{% block title %}Регистрация в Discord Clone{% endblock %}
 
 {% block content %}
-<div class="auth-container">
-    <h2>Register</h2>
-    <form method="POST">
-        <input type="text" name="username" placeholder="Username" required>
-        <input type="password" name="password" placeholder="Password" required>
-        <button type="submit">Register</button>
-    </form>
-    <p>Already have an account? <a href="/login">Login</a></p>
+<div class="auth-wrapper">
+    <div class="auth-container modern-auth">
+        <div class="auth-header">
+            <div class="auth-icon">🚀</div>
+            <h1>Создать аккаунт</h1>
+            <p>Присоединяйтесь к общению!</p>
+        </div>
+        
+        <form method="POST" class="auth-form">
+            <div class="form-group">
+                <label for="username">Имя пользователя</label>
+                <div class="input-wrapper">
+                    <span class="input-icon">👤</span>
+                    <input type="text" id="username" name="username" placeholder="Придумайте имя пользователя" required autofocus>
+                </div>
+                <small class="input-hint">От 3 до 80 символов</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Пароль</label>
+                <div class="input-wrapper">
+                    <span class="input-icon">🔒</span>
+                    <input type="password" id="password" name="password" placeholder="Придумайте пароль" required>
+                </div>
+                <small class="input-hint">Минимум 6 символов</small>
+            </div>
+            
+            <button type="submit" class="auth-btn">Зарегистрироваться</button>
+        </form>
+        
+        <div class="auth-footer">
+            <p>Уже есть аккаунт? <a href="/login">Войти</a></p>
+        </div>
+    </div>
 </div>
 {% endblock %}
