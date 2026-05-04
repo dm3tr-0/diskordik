@@ -5,3 +5,4 @@
 /.venv
 
 *.pem
+.discord_config
