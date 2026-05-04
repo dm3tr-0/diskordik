@@ -36,4 +36,16 @@
         </div>
     </div>
 </div>
+
+<script>
+    // Автоматическое удаление flash сообщений через 3 секунды
+    setTimeout(() => {
+        const flashMessages = document.querySelectorAll('.flash-message');
+        flashMessages.forEach(msg => {
+            setTimeout(() => {
+                if (msg.parentElement) msg.remove();
+            }, 3000);
+        });
+    }, 100);
+</script>
 {% endblock %}

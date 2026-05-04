@@ -11,6 +11,23 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+<!-- Flash сообщения -->
+<div id="flashMessages" class="flash-messages">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash-message flash-{{ category }}">
+                    <span class="flash-icon">
+                        {% if category == 'success' %}✓{% elif category == 'error' %}✗{% else %}ℹ{% endif %}
+                    </span>
+                    <span class="flash-text">{{ message }}</span>
+                    <button class="flash-close" onclick="this.parentElement.remove()">×</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+</div>
+
     <!-- Оверлей для мобильного меню -->
     <div id="sidebarOverlay" class="sidebar-overlay" onclick="closeMobileSidebar()"></div>
     

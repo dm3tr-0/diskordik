@@ -1,6 +1,6 @@
 import ssl
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -50,26 +50,50 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    # Проверяем, авторизован ли уже пользователь
     if current_user.is_authenticated:
+        # Если пользователь уже авторизован, перенаправляем на дашборд
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
+
+        # Проверка на пустые поля
+        if not username or not password:
+            flash('Пожалуйста, заполните все поля', 'error')
+            return render_template('register.html')
+
+        # Проверка длины имени пользователя
+        if len(username) < 3 or len(username) > 80:
+            flash('Имя пользователя должно быть от 3 до 80 символов', 'error')
+            return render_template('register.html')
+
+        # Проверка длины пароля
+        if len(password) < 6:
+            flash('Пароль должен содержать минимум 6 символов', 'error')
+            return render_template('register.html')
+
+        # Проверка на существующего пользователя
         if User.query.filter_by(username=username).first():
-            return 'Username already exists!'
-        
+            flash('Пользователь с таким именем уже существует', 'error')
+            return render_template('register.html')
+
         user = User(
             username=username,
             password_hash=generate_password_hash(password)
         )
         db.session.add(user)
         db.session.commit()
-        
+
         login_user(user)
+        user.is_online = True
+        user.last_seen = datetime.utcnow()
+        db.session.commit()
+
+        flash('Регистрация прошла успешно! Добро пожаловать!', 'success')
         return redirect(url_for('dashboard'))
-    
+
     return render_template('register.html')
 
 
@@ -81,16 +105,23 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
+
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
             user.is_online = True
             user.last_seen = datetime.utcnow()
             db.session.commit()
+
+            # Получаем следующий URL или перенаправляем на дашборд
+            next_page = request.args.get('next')
+            if next_page:
+                return redirect(next_page)
             return redirect(url_for('dashboard'))
-        
-        return 'Invalid username or password!'
+
+        # Добавляем сообщение об ошибке
+        flash('Неверное имя пользователя или пароль', 'error')
+        return render_template('login.html')
 
     return render_template('login.html')
 
