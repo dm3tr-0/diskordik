@@ -3,98 +3,160 @@
 {% block title %}Discord Clone - Dashboard{% endblock %}
 
 {% block content %}
-<div class="discord-layout">
-    <!-- Левая панель - список друзей и поиск -->
-    <div class="sidebar">
-        <div class="user-info">
-            <h3>{{ current_user.username }}</h3>
-            <a href="/logout" class="logout-btn">Выйти</a>
-        </div>
-        
-        <div class="search-section">
-            <input type="text" id="search" placeholder="Поиск пользователей...">
-            <div id="search-results"></div>
-        </div>
-        
-        <div class="friend-requests" id="friendRequests">
-            <h4>Заявки в друзья <span id="friendRequestsCount">({{ friend_requests|length }})</span></h4>
-            <div id="friendRequestsList">
-                {% for request in friend_requests %}
-                <div class="friend-request" id="request-{{ request.id }}">
-                    <span>{{ request.from_user.username }}</span>
-                    <div>
-                        <button onclick="acceptRequest({{ request.id }})">✓</button>
-                        <button onclick="rejectRequest({{ request.id }})">✗</button>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        
-        <div class="friends-section">
-            <h4>Друзья</h4>
-            <div id="friendsList">
-                {% for chat in recent_chats %}
-                <div class="friend-item" data-friend-id="{{ chat.friend.id }}" onclick="openChat({{ chat.friend.id }}, '{{ chat.friend.username }}')">
-                    <span class="friend-status {% if chat.friend.is_online %}online{% endif %}"></span>
-                    <div class="friend-info">
-                        <span class="friend-name">{{ chat.friend.username }}</span>
-                        {% if chat.last_message %}
-                        <span class="last-message">{{ chat.last_message.content[:30] }}{% if chat.last_message.content|length > 30 %}...{% endif %}</span>
-                        {% endif %}
-                    </div>
-                    {% if chat.friend.is_online %}
-                    <span class="online-indicator">🟢</span>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+<div class="dashboard-wrapper">
+    <!-- Мобильная кнопка меню -->
+    <button class="mobile-menu-btn" onclick="openMobileSidebar()" id="mobileMenuBtn">
+        ☰
+    </button>
     
-    <!-- Правая панель - чат -->
-    <div class="chat-area" id="chatArea">
-        <div class="welcome-screen" id="welcomeScreen">
-            <div class="welcome-content">
-                <h2>Добро пожаловать в Discord Clone!</h2>
-                <p>Выберите друга слева, чтобы начать общение</p>
-                <div class="features">
-                    <h3>Возможности:</h3>
-                    <ul>
-                        <li>💬 Мгновенные сообщения</li>
-                        <li>📞 Голосовые звонки</li>
-                        <li>📹 Видеозвонки</li>
-                        <li>👥 Заявки в друзья</li>
-                        <li>🟢 Статус онлайн</li>
-                    </ul>
+    <div class="dashboard-container">
+        <!-- Левая боковая панель -->
+        <div class="dashboard-sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <div class="avatar-circle">
+                            {{ current_user.username[0].upper() }}
+                        </div>
+                    </div>
+                    <div class="user-details">
+                        <h3 class="username">{{ current_user.username }}</h3>
+                        <span class="user-status online">Онлайн</span>
+                    </div>
+                    <a href="/logout" class="logout-icon" title="Выйти" 				onclick="event.preventDefault(); showLogoutModal();">
+    			🚪
+		    </a>
+                </div>
+            </div>
+            
+            <div class="sidebar-search">
+                <div class="search-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="search" placeholder="Поиск пользователей...">
+                </div>
+                <div id="search-results" class="search-results"></div>
+            </div>
+            
+            <div class="sidebar-section" id="friendRequests">
+                <div class="section-header">
+                    <h4>Заявки в друзья</h4>
+                    <span class="badge" id="friendRequestsCount">{{ friend_requests|length }}</span>
+                </div>
+                <div id="friendRequestsList" class="friend-requests-list">
+                    {% for request in friend_requests %}
+                    <div class="request-item" id="request-{{ request.id }}">
+                        <div class="request-info">
+                            <div class="request-avatar">
+                                {{ request.from_user.username[0].upper() }}
+                            </div>
+                            <span class="request-name">{{ request.from_user.username }}</span>
+                        </div>
+                        <div class="request-actions">
+                            <button class="accept-btn" onclick="acceptRequest({{ request.id }})" title="Принять">✓</button>
+                            <button class="reject-btn" onclick="rejectRequest({{ request.id }})" title="Отклонить">✗</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <h4>Друзья</h4>
+                    <span class="badge" id="friendsCount">{{ recent_chats|length }}</span>
+                </div>
+                <div id="friendsList" class="friends-list">
+                    {% for chat in recent_chats %}
+                    <div class="friend-item" data-friend-id="{{ chat.friend.id }}" onclick="openChat({{ chat.friend.id }}, '{{ chat.friend.username }}')">
+                        <div class="friend-avatar">
+                            <div class="avatar-small">
+                                {{ chat.friend.username[0].upper() }}
+                            </div>
+                            <span class="online-dot {% if chat.friend.is_online %}online{% endif %}"></span>
+                        </div>
+                        <div class="friend-info">
+                            <span class="friend-name">{{ chat.friend.username }}</span>
+                            {% if chat.last_message %}
+                            <span class="last-message">{{ chat.last_message.content[:25] }}{% if chat.last_message.content|length > 25 %}...{% endif %}</span>
+                            {% else %}
+                            <span class="last-message">Нет сообщений</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
         
-        <div class="chat-container" id="chatContainer" style="display: none;">
-            <div class="chat-header">
-                <div class="chat-header-left">
-                    <button class="back-btn" onclick="closeChat()">←</button>
-                    <span class="friend-status" id="chatFriendStatus"></span>
-                    <h3 id="chatFriendName"></h3>
-                </div>
-                <div class="call-controls">
-                    <button class="call-btn audio-call" onclick="startCall('audio')" title="Голосовой звонок">
-                        📞
-                    </button>
-                    <button class="call-btn video-call" onclick="startCall('video')" title="Видеозвонок">
-                        📹
-                    </button>
+        <!-- Правая область чата -->
+        <div class="dashboard-chat">
+            <div class="welcome-screen" id="welcomeScreen">
+                <div class="welcome-card">
+                    <div class="welcome-icon">💬</div>
+                    <h2>Добро пожаловать в Discord Clone!</h2>
+                    <p>Выберите друга слева, чтобы начать общение</p>
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">💬</div>
+                            <h3>Мгновенные сообщения</h3>
+                            <p>Общайтесь в реальном времени</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📞</div>
+                            <h3>Голосовые звонки</h3>
+                            <p>Высокое качество звука</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📹</div>
+                            <h3>Видеозвонки</h3>
+                            <p>Видите своих друзей</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">👥</div>
+                            <h3>Друзья</h3>
+                            <p>Добавляйте и общайтесь</p>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <div class="messages" id="messages"></div>
-            
-            <div class="typing-indicator" id="typingIndicator"></div>
-            
-            <div class="message-input">
-                <input type="text" id="messageInput" placeholder="Напишите сообщение..." autocomplete="off">
-                <button onclick="sendMessage()">Отправить</button>
+            <div class="chat-container" id="chatContainer" style="display: none;">
+                <div class="chat-header">
+                    <div class="chat-header-info">
+                        <button class="mobile-back-btn" onclick="closeChat()">←</button>
+                        <div class="chat-avatar">
+                            <div class="avatar-medium" id="chatAvatar">
+                                ?
+                            </div>
+                            <span class="online-dot" id="chatStatusDot"></span>
+                        </div>
+                        <div class="chat-user-info">
+                            <h3 id="chatFriendName"></h3>
+                            <span class="chat-status" id="chatFriendStatus">Офлайн</span>
+                        </div>
+                    </div>
+                    <div class="call-actions">
+                        <button class="call-btn" onclick="startCall('audio')" title="Голосовой звонок">
+                            📞
+                        </button>
+                        <button class="call-btn video-call-btn" onclick="startCall('video')" title="Видеозвонок">
+                            📹
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="messages-area" id="messages"></div>
+                
+                <div class="typing-indicator" id="typingIndicator"></div>
+                
+                <div class="message-input-area">
+                    <div class="input-wrapper-modern">
+                        <input type="text" id="messageInput" placeholder="Напишите сообщение..." autocomplete="off">
+                        <button class="send-btn" onclick="sendMessage()">
+                            📩
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -135,6 +197,19 @@ document.addEventListener('DOMContentLoaded', function() {
             openChat(parseInt(savedChatId), savedUsername);
         }
     }
+    
+    // Закрываем меню при клике вне его на мобильных
+    document.addEventListener('click', function(e) {
+        const sidebar = document.getElementById('sidebar');
+        const menuBtn = document.getElementById('mobileMenuBtn');
+        const overlay = document.getElementById('sidebarOverlay');
+        
+        if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('active')) {
+            if (!sidebar.contains(e.target) && !menuBtn.contains(e.target)) {
+                closeMobileSidebar();
+            }
+        }
+    });
 });
 
 function setupSocketListeners() {
@@ -151,6 +226,11 @@ function setupSocketListeners() {
         
         // Обновляем список друзей для отображения последнего сообщения
         updateFriendsListWithNewMessage(data);
+        
+        // Уведомление
+        if (data.sender_id !== currentUserId && currentChatId !== data.sender_id) {
+            showNotification('Новое сообщение', `${data.sender_name}: ${data.content}`);
+        }
     });
     
     // Индикатор печати
@@ -159,9 +239,9 @@ function setupSocketListeners() {
             const indicator = document.getElementById('typingIndicator');
             if (indicator) {
                 if (data.is_typing) {
-                    indicator.textContent = `${data.username} печатает...`;
+                    indicator.innerHTML = `<span class="typing-dots">${data.username} печатает<span>.</span><span>.</span><span>.</span></span>`;
                 } else {
-                    indicator.textContent = '';
+                    indicator.innerHTML = '';
                 }
             }
         }
@@ -188,11 +268,12 @@ function setupSearchListeners() {
             
             if (query.length < 2) {
                 resultsDiv.innerHTML = '';
+                resultsDiv.classList.remove('active');
                 return;
             }
             
-            // Добавляем индикатор загрузки
             resultsDiv.innerHTML = '<div class="search-loading">Поиск...</div>';
+            resultsDiv.classList.add('active');
             
             fetch(`/search_users?q=${encodeURIComponent(query)}`)
                 .then(res => res.json())
@@ -201,9 +282,12 @@ function setupSearchListeners() {
                         resultsDiv.innerHTML = '<div class="no-results">Пользователи не найдены</div>';
                     } else {
                         resultsDiv.innerHTML = users.map(user => `
-                            <div class="search-result">
-                                <span>${escapeHtml(user.username)}</span>
-                                <button onclick="sendFriendRequest(${user.id})">Добавить</button>
+                            <div class="search-result-item">
+                                <div class="search-result-avatar">
+                                    ${user.username[0].toUpperCase()}
+                                </div>
+                                <span class="search-result-name">${escapeHtml(user.username)}</span>
+                                <button class="add-friend-btn" onclick="sendFriendRequest(${user.id})">Добавить</button>
                             </div>
                         `).join('');
                     }
@@ -212,6 +296,13 @@ function setupSearchListeners() {
                     console.error('Search error:', err);
                     resultsDiv.innerHTML = '<div class="error-message">Ошибка поиска</div>';
                 });
+        });
+        
+        // Закрываем результаты при клике вне
+        document.addEventListener('click', function(e) {
+            if (!searchInput.contains(e.target) && !document.getElementById('search-results').contains(e.target)) {
+                document.getElementById('search-results').classList.remove('active');
+            }
         });
     }
 }
@@ -256,18 +347,28 @@ function loadFriendsList() {
         .then(res => res.json())
         .then(data => {
             const friendsList = document.getElementById('friendsList');
+            const friendsCount = document.getElementById('friendsCount');
+            
+            if (friendsCount) {
+                friendsCount.textContent = data.friends.length;
+            }
+            
             if (friendsList) {
                 if (data.friends.length === 0) {
-                    friendsList.innerHTML = '<div class="no-friends">У вас пока нет друзей. Добавьте кого-нибудь через поиск!</div>';
+                    friendsList.innerHTML = '<div class="empty-state">У вас пока нет друзей</div>';
                 } else {
                     friendsList.innerHTML = data.friends.map(friend => `
                         <div class="friend-item" data-friend-id="${friend.id}" onclick="openChat(${friend.id}, '${escapeHtml(friend.username)}')">
-                            <span class="friend-status ${friend.is_online ? 'online' : ''}"></span>
+                            <div class="friend-avatar">
+                                <div class="avatar-small">
+                                    ${friend.username[0].toUpperCase()}
+                                </div>
+                                <span class="online-dot ${friend.is_online ? 'online' : ''}"></span>
+                            </div>
                             <div class="friend-info">
                                 <span class="friend-name">${escapeHtml(friend.username)}</span>
-                                ${friend.last_message ? `<span class="last-message">${escapeHtml(friend.last_message)}</span>` : ''}
+                                <span class="last-message">${friend.last_message ? escapeHtml(friend.last_message) : 'Нет сообщений'}</span>
                             </div>
-                            ${friend.is_online ? '<span class="online-indicator">🟢</span>' : ''}
                         </div>
                     `).join('');
                 }
@@ -287,18 +388,17 @@ function openChat(friendId, username) {
     const welcomeScreen = document.getElementById('welcomeScreen');
     const chatContainer = document.getElementById('chatContainer');
     const chatFriendName = document.getElementById('chatFriendName');
-    const chatFriendStatus = document.getElementById('chatFriendStatus');
+    const chatAvatar = document.getElementById('chatAvatar');
     
     if (welcomeScreen) welcomeScreen.style.display = 'none';
     if (chatContainer) chatContainer.style.display = 'flex';
     if (chatFriendName) chatFriendName.textContent = username;
+    if (chatAvatar) chatAvatar.textContent = username[0].toUpperCase();
     
     // Получаем статус друга
     const friendItem = document.querySelector(`.friend-item[data-friend-id="${friendId}"]`);
-    const isOnline = friendItem ? friendItem.querySelector('.friend-status.online') !== null : false;
-    if (chatFriendStatus) {
-        chatFriendStatus.className = `friend-status ${isOnline ? 'online' : ''}`;
-    }
+    const isOnline = friendItem ? friendItem.querySelector('.online-dot.online') !== null : false;
+    updateChatStatus(isOnline);
     
     // Подсвечиваем активный чат в списке
     document.querySelectorAll('.friend-item').forEach(item => {
@@ -313,11 +413,16 @@ function openChat(friendId, username) {
     
     // Очищаем индикатор печати
     const typingIndicator = document.getElementById('typingIndicator');
-    if (typingIndicator) typingIndicator.textContent = '';
+    if (typingIndicator) typingIndicator.innerHTML = '';
     
     // Фокусируемся на поле ввода
     const messageInput = document.getElementById('messageInput');
     if (messageInput) messageInput.focus();
+    
+    // На мобильных закрываем меню после выбора чата
+    if (window.innerWidth <= 768) {
+        closeMobileSidebar();
+    }
 }
 
 function closeChat() {
@@ -337,7 +442,7 @@ function closeChat() {
     if (welcomeScreen) welcomeScreen.style.display = 'flex';
     if (chatContainer) chatContainer.style.display = 'none';
     if (messagesDiv) messagesDiv.innerHTML = '';
-    if (typingIndicator) typingIndicator.textContent = '';
+    if (typingIndicator) typingIndicator.innerHTML = '';
     
     // Убираем подсветку
     document.querySelectorAll('.friend-item').forEach(item => {
@@ -373,13 +478,13 @@ function addMessage(data) {
     const isSent = data.sender_id === currentUserId;
     const senderName = isSent ? 'Вы' : (data.sender_name || currentChatUsername);
     
-    messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+    messageDiv.className = `message-bubble ${isSent ? 'sent' : 'received'}`;
     messageDiv.innerHTML = `
-        <div class="message-header">
-            <strong>${escapeHtml(senderName)}</strong>
-            <small>${data.timestamp || new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</small>
+        <div class="message-info">
+            <strong class="message-sender">${escapeHtml(senderName)}</strong>
+            <span class="message-time">${data.timestamp || new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
-        <div class="message-content">${escapeHtml(data.content)}</div>
+        <div class="message-text">${escapeHtml(data.content)}</div>
     `;
     
     messagesDiv.appendChild(messageDiv);
@@ -393,8 +498,6 @@ function sendMessage() {
     const content = input.value.trim();
     
     if (content && currentChatId && socket) {
-        console.log('Sending message:', { receiver_id: currentChatId, content: content });
-        
         // Отправляем сообщение на сервер
         socket.emit('send_message', {
             receiver_id: currentChatId,
@@ -410,8 +513,6 @@ function sendMessage() {
             receiver_id: currentChatId,
             is_typing: false
         });
-        
-        // НЕ добавляем сообщение локально - ждем от сервера
     }
 }
 
@@ -420,22 +521,14 @@ function updateFriendsListWithNewMessage(data) {
     const friendItem = document.querySelector(`.friend-item[data-friend-id="${friendId}"]`);
     
     if (friendItem) {
-        let lastMessageSpan = friendItem.querySelector('.last-message');
-        const messagePreview = data.content.length > 30 ? data.content.substring(0, 30) + '...' : data.content;
+        const lastMessageSpan = friendItem.querySelector('.last-message');
+        const messagePreview = data.content.length > 25 ? data.content.substring(0, 25) + '...' : data.content;
         
         if (lastMessageSpan) {
             lastMessageSpan.textContent = messagePreview;
-        } else {
-            const friendInfo = friendItem.querySelector('.friend-info');
-            if (friendInfo) {
-                const span = document.createElement('span');
-                span.className = 'last-message';
-                span.textContent = messagePreview;
-                friendInfo.appendChild(span);
-            }
         }
         
-        // Перемещаем друга вверх списка (как в мессенджерах)
+        // Перемещаем друга вверх списка
         const friendsList = document.getElementById('friendsList');
         if (friendsList && friendItem.parentNode === friendsList) {
             friendsList.removeChild(friendItem);
@@ -447,30 +540,36 @@ function updateFriendsListWithNewMessage(data) {
 function updateUserStatus(userId, status) {
     const friendItem = document.querySelector(`.friend-item[data-friend-id="${userId}"]`);
     if (friendItem) {
-        const statusSpan = friendItem.querySelector('.friend-status');
-        const onlineIndicator = friendItem.querySelector('.online-indicator');
-        
-        if (status === 'online') {
-            if (statusSpan) statusSpan.classList.add('online');
-            if (!onlineIndicator) {
-                const indicator = document.createElement('span');
-                indicator.className = 'online-indicator';
-                indicator.textContent = '🟢';
-                friendItem.appendChild(indicator);
-            }
-        } else {
-            if (statusSpan) statusSpan.classList.remove('online');
-            if (onlineIndicator) {
-                onlineIndicator.remove();
+        const onlineDot = friendItem.querySelector('.online-dot');
+        if (onlineDot) {
+            if (status === 'online') {
+                onlineDot.classList.add('online');
+            } else {
+                onlineDot.classList.remove('online');
             }
         }
-        
-        // Обновляем статус в шапке чата если открыт чат с этим пользователем
-        if (currentChatId === userId) {
-            const chatStatus = document.getElementById('chatFriendStatus');
-            if (chatStatus) {
-                chatStatus.className = `friend-status ${status === 'online' ? 'online' : ''}`;
-            }
+    }
+    
+    // Обновляем статус в шапке чата если открыт чат с этим пользователем
+    if (currentChatId === userId) {
+        updateChatStatus(status === 'online');
+    }
+}
+
+function updateChatStatus(isOnline) {
+    const chatStatus = document.getElementById('chatFriendStatus');
+    const statusDot = document.getElementById('chatStatusDot');
+    
+    if (chatStatus) {
+        chatStatus.textContent = isOnline ? 'Онлайн' : 'Офлайн';
+        chatStatus.className = `chat-status ${isOnline ? 'online' : 'offline'}`;
+    }
+    
+    if (statusDot) {
+        if (isOnline) {
+            statusDot.classList.add('online');
+        } else {
+            statusDot.classList.remove('online');
         }
     }
 }
@@ -483,9 +582,10 @@ function sendFriendRequest(userId) {
             if (data.success) {
                 const results = document.getElementById('search-results');
                 if (results) {
-                    results.innerHTML = '<div class="success-message">Заявка отправлена!</div>';
+                    results.innerHTML = '<div class="success-message">✓ Заявка отправлена!</div>';
                     setTimeout(() => {
                         results.innerHTML = '';
+                        results.classList.remove('active');
                         const searchInput = document.getElementById('search');
                         if (searchInput) searchInput.value = '';
                     }, 2000);
@@ -523,19 +623,24 @@ function loadFriendRequests() {
             const requestsCount = document.getElementById('friendRequestsCount');
             
             if (requestsCount) {
-                requestsCount.textContent = `(${data.requests.length})`;
+                requestsCount.textContent = data.requests.length;
             }
             
             if (requestsList) {
                 if (data.requests.length === 0) {
-                    requestsList.innerHTML = '<div class="no-requests">Нет новых заявок</div>';
+                    requestsList.innerHTML = '<div class="empty-state">Нет новых заявок</div>';
                 } else {
                     requestsList.innerHTML = data.requests.map(request => `
-                        <div class="friend-request" id="request-${request.id}">
-                            <span>${escapeHtml(request.username)}</span>
-                            <div>
-                                <button onclick="acceptRequest(${request.id})" title="Принять">✓</button>
-                                <button onclick="rejectRequest(${request.id})" title="Отклонить">✗</button>
+                        <div class="request-item" id="request-${request.id}">
+                            <div class="request-info">
+                                <div class="request-avatar">
+                                    ${request.username[0].toUpperCase()}
+                                </div>
+                                <span class="request-name">${escapeHtml(request.username)}</span>
+                            </div>
+                            <div class="request-actions">
+                                <button class="accept-btn" onclick="acceptRequest(${request.id})" title="Принять">✓</button>
+                                <button class="reject-btn" onclick="rejectRequest(${request.id})" title="Отклонить">✗</button>
                             </div>
                         </div>
                     `).join('');
@@ -545,29 +650,27 @@ function loadFriendRequests() {
 }
 
 function showNotification(title, message) {
-    // Простая реализация уведомления
+    // Уведомление в браузере
     if (Notification.permission === "granted") {
         new Notification(title, { body: message });
-    } else if (Notification.permission !== "denied") {
-        Notification.requestPermission().then(permission => {
-            if (permission === "granted") {
-                new Notification(title, { body: message });
-            }
-        });
     }
     
-    // Также показываем визуальное уведомление в DOM
+    // Визуальное уведомление
     const notification = document.createElement('div');
-    notification.className = 'toast-notification';
+    notification.className = 'toast-notification-modern';
     notification.innerHTML = `
-        <strong>${escapeHtml(title)}</strong>
-        <p>${escapeHtml(message)}</p>
+        <div class="toast-icon">💬</div>
+        <div class="toast-content">
+            <strong>${escapeHtml(title)}</strong>
+            <p>${escapeHtml(message)}</p>
+        </div>
     `;
     document.body.appendChild(notification);
     
     setTimeout(() => {
-        notification.remove();
-    }, 5000);
+        notification.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 4000);
 }
 
 function escapeHtml(text) {
@@ -577,9 +680,42 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Запрашиваем разрешение на уведомления при загрузке
+// Запрашиваем разрешение на уведомления
 if (Notification.permission !== "granted" && Notification.permission !== "denied") {
     Notification.requestPermission();
+}
+
+// Обработка клавиатуры на мобильных устройствах
+let originalViewportHeight = window.innerHeight;
+let isKeyboardOpen = false;
+
+function handleKeyboardResize() {
+    const currentHeight = window.innerHeight;
+    const chatContainer = document.getElementById('chatContainer');
+    const messagesArea = document.getElementById('messages');
+    const messageInput = document.getElementById('messageInput');
+    
+    if (window.innerWidth <= 768 && chatContainer && chatContainer.style.display === 'flex') {
+        // Если высота уменьшилась больше чем на 150px, значит клавиатура открыта
+        if (originalViewportHeight - currentHeight > 150) {
+            if (!isKeyboardOpen) {
+                isKeyboardOpen = true;
+                document.body.classList.add('keyboard-open');
+                
+                // Прокручиваем к последнему сообщению
+                if (messagesArea) {
+                    setTimeout(() => {
+                        messagesArea.scrollTop = messagesArea.scrollHeight;
+                    }, 100);
+                }
+            }
+        } else {
+            if (isKeyboardOpen) {
+                isKeyboardOpen = false;
+                document.body.classList.remove('keyboard-open');
+            }
+        }
+    }
 }
 </script>
 {% endblock %}

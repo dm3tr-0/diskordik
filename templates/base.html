@@ -2,47 +2,147 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{% block title %}Discord Clone{% endblock %}</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='socket.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+    <!-- Оверлей для мобильного меню -->
+    <div id="sidebarOverlay" class="sidebar-overlay" onclick="closeMobileSidebar()"></div>
+    
+    <!-- Модальное окно подтверждения выхода -->
+    <div id="logoutModal" class="logout-modal" style="display: none;">
+        <div class="logout-modal-content">
+            <div class="logout-modal-icon">🚪</div>
+            <h3>Выход из аккаунта</h3>
+            <p>Вы уверены, что хотите выйти?</p>
+            <div class="logout-modal-actions">
+                <button class="logout-cancel-btn" onclick="closeLogoutModal()">Отмена</button>
+                <button class="logout-confirm-btn" onclick="confirmLogout()">Выйти</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Глобальная плашка для активного звонка -->
     <div id="globalCallWidget" style="display: none;">
         <div id="callWidgetContent">
-            <span id="callWidgetStatus">Звонок...</span>
-            <span id="callWidgetUsername"></span>
+            <div class="call-icon">📞</div>
+            <div class="call-info">
+                <span id="callWidgetStatus">Звонок...</span>
+                <span id="callWidgetUsername"></span>
+            </div>
             <div class="call-widget-controls">
-                <button id="muteBtn" title="Отключить микрофон">🎤</button>
-                <button id="speakerBtn" title="Отключить звук">🔊</button>
-                <button id="endCallBtn" class="end-call-widget" title="Завершить звонок">📴</button>
+                <button id="muteBtn" class="call-control-btn" title="Отключить микрофон">🎤</button>
+                <button id="speakerBtn" class="call-control-btn" title="Отключить звук">🔊</button>
+                <button id="endCallBtn" class="call-control-btn end-call" title="Завершить звонок">📴</button>
             </div>
         </div>
     </div>
 
     <!-- Глобальное модальное окно для входящего звонка -->
-    <div id="globalCallModal" class="call-modal" style="display: none;">
-        <div class="call-window">
-            <h3 id="modalCallerName">Входящий звонок...</h3>
-            <div id="modalCallAvatar" class="call-avatar">🎤</div>
-            <div id="modalVideoContainer" class="video-container" style="display: none;">
-                <video id="modalLocalVideo" class="local-video" autoplay muted playsinline></video>
+    <div id="globalCallModal" class="call-modal-modern" style="display: none;">
+        <div class="call-modal-content">
+            <div class="call-modal-header">
+                <div class="caller-avatar">
+                    <div class="avatar-large" id="modalCallerAvatar">🎤</div>
+                </div>
+                <h3 id="modalCallerName">Входящий звонок...</h3>
+                <p id="modalCallStatus" class="call-status-text">Звонок...</p>
             </div>
-            <div id="modalCallStatus" class="call-status">Звонок...</div>
-            <div class="call-buttons" id="modalCallButtons">
-                <button class="accept-call" onclick="acceptCallFromModal()">Принять</button>
-                <button class="reject-call" onclick="rejectCallFromModal()">Отклонить</button>
+            <div id="modalVideoContainer" class="video-preview" style="display: none;">
+                <video id="modalLocalVideo" class="local-video-preview" autoplay muted playsinline></video>
+            </div>
+            <div class="call-modal-actions" id="modalCallButtons">
+                <button class="modal-accept-btn" onclick="acceptCallFromModal()">Принять</button>
+                <button class="modal-reject-btn" onclick="rejectCallFromModal()">Отклонить</button>
             </div>
         </div>
     </div>
 
-    <div class="{% if request.endpoint in ['login', 'register'] %}auth-page{% else %}container{% endif %}">
+    <div class="{% if request.endpoint in ['login', 'register'] %}auth-page{% else %}app-container{% endif %}">
         {% block content %}{% endblock %}
     </div>
 
+    <script>
+    // Функция для закрытия мобильного меню
+    function closeMobileSidebar() {
+        const sidebar = document.querySelector('.dashboard-sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        if (sidebar) sidebar.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+    }
+    
+    // Функция для открытия мобильного меню
+    function openMobileSidebar() {
+        const sidebar = document.querySelector('.dashboard-sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        if (sidebar) sidebar.classList.add('active');
+        if (overlay) overlay.classList.add('active');
+    }
+    
+    // Функции для модального окна выхода
+    function showLogoutModal() {
+        const modal = document.getElementById('logoutModal');
+        if (modal) modal.style.display = 'flex';
+    }
+    
+    function closeLogoutModal() {
+        const modal = document.getElementById('logoutModal');
+        if (modal) modal.style.display = 'none';
+    }
+    
+    function confirmLogout() {
+        window.location.href = '/logout';
+    }
+    
+    // Обработка кнопки "назад" в браузере
+    let showLogoutOnBack = true;
+    
+    window.addEventListener('load', function() {
+        // Добавляем состояние в историю, чтобы перехватить кнопку "назад"
+        if (window.location.pathname === '/dashboard' || window.location.pathname === '/') {
+            history.pushState({page: 'dashboard'}, '', window.location.href);
+            showLogoutOnBack = true;
+        }
+    });
+    
+    window.addEventListener('popstate', function(event) {
+        if (showLogoutOnBack && (window.location.pathname === '/dashboard' || window.location.pathname === '/')) {
+            // Показываем модальное окно подтверждения
+            showLogoutModal();
+            // Возвращаем состояние обратно
+            history.pushState({page: 'dashboard'}, '', window.location.href);
+        }
+    });
+    
+    // Закрываем меню при ресайзе окна (если стало десктопом)
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) {
+            closeMobileSidebar();
+        }
+    });
+    
+    // Обработка клавиши Escape для закрытия модальных окон
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeLogoutModal();
+            closeMobileSidebar();
+        }
+    });
+    
+    // Закрытие модального окна при клике на оверлей
+    document.addEventListener('click', function(e) {
+        const modal = document.getElementById('logoutModal');
+        if (e.target === modal) {
+            closeLogoutModal();
+        }
+    });
+    </script>
+    
     <script src="{{ url_for('static', filename='call.js') }}"></script>
 </body>
 </html>
