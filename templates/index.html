@@ -210,6 +210,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+    setupFriendContextMenu();
 });
 
 function setupSocketListeners() {
@@ -373,6 +374,7 @@ function loadFriendsList() {
                     `).join('');
                 }
             }
+	    setupFriendContextMenu();
         });
 }
 
