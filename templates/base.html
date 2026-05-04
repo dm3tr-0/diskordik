@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{% block title %}Discord Clone{% endblock %}</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <!-- Передаем STUN URL в JavaScript -->
+    <script>
+        window.STUN_URL = "{{ stun_url }}";
+        console.log("STUN URL:", window.STUN_URL);
+    </script>
     <script src="{{ url_for('static', filename='socket.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -73,10 +78,7 @@
             <div id="modalVideoContainer" class="video-preview" style="display: none;">
                 <video id="modalLocalVideo" class="local-video-preview" autoplay muted playsinline></video>
             </div>
-            <div class="call-modal-actions" id="modalCallButtons">
-                <button class="modal-accept-btn" onclick="acceptCallFromModal()">Принять</button>
-                <button class="modal-reject-btn" onclick="rejectCallFromModal()">Отклонить</button>
-            </div>
+            <div class="call-modal-actions" id="modalCallButtons"></div>
         </div>
     </div>
 

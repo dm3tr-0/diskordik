@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 {% block title %}Discord Clone - Dashboard{% endblock %}
 
 {% block content %}
@@ -698,24 +698,25 @@ function handleKeyboardResize() {
     if (window.innerWidth <= 768 && chatContainer && chatContainer.style.display === 'flex') {
         // Если высота уменьшилась больше чем на 150px, значит клавиатура открыта
         if (originalViewportHeight - currentHeight > 150) {
-            if (!isKeyboardOpen) {
-                isKeyboardOpen = true;
-                document.body.classList.add('keyboard-open');
-                
-                // Прокручиваем к последнему сообщению
-                if (messagesArea) {
-                    setTimeout(() => {
-                        messagesArea.scrollTop = messagesArea.scrollHeight;
-                    }, 100);
-                }
+            document.body.classList.add('keyboard-open');
+            // Прокручиваем к последнему сообщению
+            if (messagesArea) {
+                setTimeout(() => {
+                    messagesArea.scrollTop = messagesArea.scrollHeight;
+                }, 100);
             }
         } else {
-            if (isKeyboardOpen) {
-                isKeyboardOpen = false;
-                document.body.classList.remove('keyboard-open');
-            }
+            document.body.classList.remove('keyboard-open');
         }
     }
 }
+
+// Слушаем изменение размера окна (клавиатура вызывает resize)
+window.addEventListener('resize', handleKeyboardResize);
+
+// Сохраняем изначальную высоту
+window.addEventListener('load', function() {
+    originalViewportHeight = window.innerHeight;
+});
 </script>
 {% endblock %}

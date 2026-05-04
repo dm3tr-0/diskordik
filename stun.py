@@ -1,6 +1,21 @@
 import socket
 import threading
 import struct
+import json
+import os
+
+CONFIG_FILE = '.discord_config'
+
+def load_stun_config():
+    """Загрузить конфигурацию STUN сервера"""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                config = json.load(f)
+                return config.get('stun_host', '0.0.0.0'), config.get('stun_port', 3478)
+        except:
+            pass
+    return '0.0.0.0', 3478
 
 class STUNServer:
     """
@@ -14,7 +29,11 @@ class STUNServer:
     STUN_ATTR_XOR_MAPPED_ADDRESS = 0x0020
     STUN_ATTR_MAPPED_ADDRESS = 0x0001
     
-    def __init__(self, host='0.0.0.0', port=3478):
+    def __init__(self, host=None, port=None):
+        # Загружаем конфигурацию если параметры не переданы
+        if host is None or port is None:
+            host, port = load_stun_config()
+        
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -32,7 +51,8 @@ class STUNServer:
                 # Запускаем обработку в отдельном потоке
                 threading.Thread(target=self.handle_request, args=(data, addr)).start()
             except Exception as e:
-                print(f"STUN error: {e}")
+                if self.running:
+                    print(f"STUN error: {e}")
     
     def handle_request(self, data, addr):
         """Обрабатывает STUN запрос"""
@@ -88,7 +108,7 @@ class STUNServer:
         self.sock.close()
 
 if __name__ == '__main__':
-    server = STUNServer(host='0.0.0.0', port=3478)
+    server = STUNServer()
     try:
         server.start()
     except KeyboardInterrupt:

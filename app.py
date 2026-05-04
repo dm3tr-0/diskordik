@@ -12,7 +12,10 @@ from threading import Thread
 
 from models import db, User, FriendRequest, Message, Call
 from stun import STUNServer
+from config_manager import load_config
 
+# Загружаем конфигурацию
+config = load_config()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-this'
@@ -27,7 +30,8 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-server = STUNServer(host='0.0.0.0', port=3478)
+# Используем IP из конфигурации
+server = STUNServer(host=config['stun_host'], port=config['stun_port'])
 
 
 @login_manager.user_loader
@@ -40,6 +44,15 @@ with app.app_context():
     db.create_all()
 
 
+# Добавляем конфигурацию в контекст шаблонов
+@app.context_processor
+def inject_config():
+    return {
+        'config': config,
+        'stun_url': f"stun:{config['server_ip']}:{config['stun_port']}"
+    }
+
+
 # Маршруты
 @app.route('/')
 def index():
@@ -50,31 +63,25 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    # Проверяем, авторизован ли уже пользователь
     if current_user.is_authenticated:
-        # Если пользователь уже авторизован, перенаправляем на дашборд
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
 
-        # Проверка на пустые поля
         if not username or not password:
             flash('Пожалуйста, заполните все поля', 'error')
             return render_template('register.html')
 
-        # Проверка длины имени пользователя
         if len(username) < 3 or len(username) > 80:
             flash('Имя пользователя должно быть от 3 до 80 символов', 'error')
             return render_template('register.html')
 
-        # Проверка длины пароля
         if len(password) < 6:
             flash('Пароль должен содержать минимум 6 символов', 'error')
             return render_template('register.html')
 
-        # Проверка на существующего пользователя
         if User.query.filter_by(username=username).first():
             flash('Пользователь с таким именем уже существует', 'error')
             return render_template('register.html')
@@ -113,13 +120,11 @@ def login():
             user.last_seen = datetime.utcnow()
             db.session.commit()
 
-            # Получаем следующий URL или перенаправляем на дашборд
             next_page = request.args.get('next')
             if next_page:
                 return redirect(next_page)
             return redirect(url_for('dashboard'))
 
-        # Добавляем сообщение об ошибке
         flash('Неверное имя пользователя или пароль', 'error')
         return render_template('login.html')
 
@@ -129,14 +134,16 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
+    # Завершаем все активные звонки
     active_calls = Call.query.filter(
         ((Call.caller_id == current_user.id) | (Call.receiver_id == current_user.id)),
-        Call.status == 'active'
+        Call.status.in_(['ringing', 'active'])
     ).all()
     
     for call in active_calls:
         call.status = 'ended'
         call.ended_at = datetime.utcnow()
+        # Уведомляем всех участников звонка
         socketio.emit('call_ended', {'call_id': call.id}, room=f'call_{call.id}')
     
     db.session.commit()
@@ -392,6 +399,9 @@ def handle_call_user(data):
     db.session.add(call)
     db.session.commit()
     
+    # Присоединяем создателя к комнате звонка
+    join_room(f'call_{call.id}')
+    
     # Отправляем уведомление о звонке
     emit('incoming_call', {
         'call_id': call.id,
@@ -401,7 +411,10 @@ def handle_call_user(data):
     }, room=f'user_{receiver_id}')
     
     # Отправляем call_id обратно инициатору
-    emit('call_initialized', {'call_id': call.id}, room=f'user_{current_user.id}')
+    emit('call_initialized', {
+        'call_id': call.id,
+        'call_type': call_type
+    }, room=f'user_{current_user.id}')
 
 
 @socketio.on('accept_call')
@@ -409,13 +422,13 @@ def handle_accept_call(data):
     call_id = data['call_id']
     call = db.session.get(Call, call_id)
     
-    if call and call.receiver_id == current_user.id:
+    if call and call.receiver_id == current_user.id and call.status == 'ringing':
         call.status = 'active'
         call.started_at = datetime.utcnow()
         db.session.commit()
         
-        # Создаем комнату для звонка
-        join_room(f'call_{call_id}')
+        # Присоединяем получателя к комнате звонка
+        join_room(f'call_{call.id}')
         
         emit('call_accepted', {
             'call_id': call_id,
@@ -425,7 +438,7 @@ def handle_accept_call(data):
         
         emit('call_connected', {
             'call_id': call_id
-        }, room=f'call_{call_id}')
+        }, room=f'call_{call.id}')
 
 
 @socketio.on('reject_call')
@@ -433,7 +446,7 @@ def handle_reject_call(data):
     call_id = data['call_id']
     call = db.session.get(Call, call_id)
     
-    if call and call.receiver_id == current_user.id:
+    if call and call.receiver_id == current_user.id and call.status == 'ringing':
         call.status = 'rejected'
         call.ended_at = datetime.utcnow()
         db.session.commit()
@@ -453,11 +466,12 @@ def handle_end_call(data):
         call.ended_at = datetime.utcnow()
         db.session.commit()
         
-        leave_room(f'call_{call_id}')
-        
+        # Уведомляем всех участников звонка
         emit('call_ended', {
             'call_id': call_id
-        }, room=f'call_{call_id}')
+        }, room=f'call_{call.id}')
+        
+        leave_room(f'call_{call.id}')
 
 
 # WebRTC ICE кандидаты и SDP
@@ -510,45 +524,38 @@ def generate_self_signed_certificate():
     cert_file = 'cert.pem'
     key_file = 'key.pem'
     
-    # Проверяем, существует ли сертификат
     if os.path.exists(cert_file) and os.path.exists(key_file):
         return cert_file, key_file
     
     print("🔐 Generating SSL certificate...")
     
-    # Генерируем приватный ключ
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     
-    # Создаем самоподписанный сертификат
     subject = issuer = x509.Name([
         x509.NameAttribute(NameOID.COUNTRY_NAME, "RU"),
         x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Moscow"),
         x509.NameAttribute(NameOID.LOCALITY_NAME, "Moscow"),
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Discord Clone"),
-        x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
+        x509.NameAttribute(NameOID.COMMON_NAME, config['server_ip']),
     ])
     
-    # Получаем локальный IP
     san_values = [
         x509.DNSName("localhost"),
-        x509.DNSName("*.localhost"),
         x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+        x509.IPAddress(ipaddress.IPv4Address(config['server_ip'])),
     ]
     
-    # Добавляем внешний IP если есть
     try:
         import socket
         hostname = socket.gethostname()
         local_ip = socket.gethostbyname(hostname)
-        if local_ip and local_ip != "127.0.0.1":
+        if local_ip and local_ip not in ["127.0.0.1", config['server_ip']]:
             san_values.append(x509.IPAddress(ipaddress.IPv4Address(local_ip)))
-            print(f"   Adding IP: {local_ip}")
     except:
         pass
     
     san = x509.SubjectAlternativeName(san_values)
     
-    # Создаем сертификат
     cert = (x509.CertificateBuilder()
         .subject_name(subject)
         .issuer_name(issuer)
@@ -559,7 +566,6 @@ def generate_self_signed_certificate():
         .add_extension(san, critical=False)
         .sign(private_key, hashes.SHA256()))
     
-    # Сохраняем ключ
     with open(key_file, "wb") as f:
         f.write(private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
@@ -567,7 +573,6 @@ def generate_self_signed_certificate():
             encryption_algorithm=serialization.NoEncryption()
         ))
     
-    # Сохраняем сертификат
     with open(cert_file, "wb") as f:
         f.write(cert.public_bytes(serialization.Encoding.PEM))
     
@@ -576,9 +581,7 @@ def generate_self_signed_certificate():
 
 
 def start_stun_server():
-    """
-    Запускает STUN-сервер
-    """
+    """Запускает STUN-сервер"""
     try:
         server.start()
     except KeyboardInterrupt:
@@ -589,37 +592,39 @@ def start_stun_server():
 def main():
     # Запуск STUN-сервера в отдельном потоке
     Thread(target=start_stun_server, daemon=True).start()
-
+    
     # Подгрузка сертификатов
     generate_self_signed_certificate()
-
+    
     print("\n" + "=" * 60)
     print("Discord Clone Запущен!")
     print("=" * 60)
+    print(f"\nКонфигурация:")
+    print(f"   • IP адрес сервера: {config['server_ip']}")
+    print(f"   • Порт приложения: {config['app_port']}")
+    print(f"   • STUN порт: {config['stun_port']}")
     print("\nДоступные адреса:")
-    print("   • http://localhost:5000     (чат работает, но ЗВОНКИ НЕ РАБОТАЮТ)")
-    print("   • https://localhost:5000    (чат и звонки работают)")
+    print(f"   • http://{config['server_ip']}:{config['app_port']}     (чат работает, звонки НЕ РАБОТАЮТ)")
+    print(f"   • https://{config['server_ip']}:{config['app_port']}    (чат и звонки работают)")
     print("=" * 60 + "\n")
-
+    
     if os.path.exists('cert.pem') and os.path.exists('key.pem'):
-        print("Найдены SSL сертификаты! Запуск в HTTPS режиме...")
-
+        print("🔒 Запуск в HTTPS режиме...")
         try:
             socketio.run(
                 app,
-                host='0.0.0.0',
-                port=5000,
+                host=config['app_host'],
+                port=config['app_port'],
                 debug=True,
                 keyfile='key.pem',
                 certfile='cert.pem'
             )
-
         except TypeError:
-            print(" Не удалось запустить HTTPS режим. Запуск в HTTP режиме...")
-            socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+            print("⚠️ Не удалось запустить HTTPS режим. Запуск в HTTP режиме...")
+            socketio.run(app, host=config['app_host'], port=config['app_port'], debug=True)
     else:
-        print(" SSL сертификаты не найдены. Запуск в HTTP режиме...")
-        socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+        print("⚠️ SSL сертификаты не найдены. Запуск в HTTP режиме...")
+        socketio.run(app, host=config['app_host'], port=config['app_port'], debug=True)
 
 
 if __name__ == '__main__':
