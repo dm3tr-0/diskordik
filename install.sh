@@ -5,12 +5,17 @@
 
 set -e  # Остановка при ошибке
 
+# Глобальные переменные
+SERVER_IP=""
+APP_PORT=""
+STUN_PORT=""
+
 # Цвета для вывода
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${BLUE}"
 echo "╔══════════════════════════════════════════════════════════╗"
@@ -22,14 +27,12 @@ echo -e "${NC}"
 
 # Функция для запроса IP адреса
 get_server_ip() {
-    local ip
     local default_ip=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || curl -s --max-time 3 icanhazip.com 2>/dev/null || echo "0.0.0.0")
     
     echo -e "${YELLOW}Определение IP адреса сервера...${NC}"
     echo -e "${GREEN}Внешний IP сервера: ${default_ip}${NC}"
     echo ""
-    echo -e -n "${YELLOW}Введите IP адрес для доступа к серверу (Enter для $default_ip): ${NC}"
-    read ip
+    read -p "$(echo -e ${YELLOW}Введите IP адрес для доступа к серверу (Enter для ${default_ip}): ${NC})" ip
     
     if [ -z "$ip" ]; then
         ip=$default_ip
@@ -39,7 +42,7 @@ get_server_ip() {
     if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
         echo "$ip"
     else
-        echo -e "${RED}Неверный формат IP адреса. Использую $default_ip${NC}"
+        echo -e "${RED}Неверный формат IP адреса. Использую $default_ip${NC}" >&2
         echo "$default_ip"
     fi
 }
@@ -50,8 +53,7 @@ get_port() {
     local default_port=$2
     local port
     
-    echo -e -n "${YELLOW}Введите порт для $port_name (Enter для $default_port): ${NC}"
-    read port
+    read -p "$(echo -e ${YELLOW}Введите порт для $port_name (Enter для $default_port): ${NC})" port
     
     if [ -z "$port" ]; then
         port=$default_port
@@ -61,7 +63,7 @@ get_port() {
     if [[ $port =~ ^[0-9]+$ ]] && [ $port -ge 1024 ] && [ $port -le 65535 ]; then
         echo "$port"
     else
-        echo -e "${RED}Неверный порт. Использую $default_port${NC}"
+        echo -e "${RED}Неверный порт. Использую $default_port${NC}" >&2
         echo "$default_port"
     fi
 }
@@ -94,29 +96,21 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-    # Перезагрузка systemd
     sudo systemctl daemon-reload
-    
-    # Включение автозапуска
     sudo systemctl enable ${service_name}.service > /dev/null 2>&1
     
     echo -e "${GREEN}✅ Сервис создан и добавлен в автозагрузку${NC}"
-    echo -e "${GREEN}   Имя сервиса: ${service_name}${NC}"
 }
 
 # Функция создания конфигурационного файла
 create_config_file() {
-    local server_ip=$1
-    local app_port=$2
-    local stun_port=$3
-    
     cat > .discord_config << EOF
 {
-    "server_ip": "${server_ip}",
-    "app_port": ${app_port},
-    "stun_port": ${stun_port},
-    "stun_host": "${server_ip}",
-    "app_host": "${server_ip}"
+    "server_ip": "${SERVER_IP}",
+    "app_port": ${APP_PORT},
+    "stun_port": ${STUN_PORT},
+    "stun_host": "${SERVER_IP}",
+    "app_host": "${SERVER_IP}"
 }
 EOF
     
@@ -133,21 +127,16 @@ sudo apt install -y -qq make build-essential libssl-dev zlib1g-dev libbz2-dev \
 echo -e "${BLUE}[2/8] Установка pyenv...${NC}"
 if [ ! -d "$HOME/.pyenv" ]; then
     curl -s https://pyenv.run | bash
-else
-    echo -e "${GREEN}pyenv уже установлен${NC}"
 fi
 
-# Настройка pyenv в текущей сессии
 export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init --path)" 2>/dev/null
 eval "$(pyenv virtualenv-init -)" 2>/dev/null
 
-# Добавление в .bashrc если еще нет
 if ! grep -q "pyenv" ~/.bashrc; then
     echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> ~/.bashrc
     echo 'eval "$(pyenv init --path)"' >> ~/.bashrc
     echo 'eval "$(pyenv virtualenv-init -)"' >> ~/.bashrc
-    echo -e "${GREEN}✅ pyenv добавлен в .bashrc${NC}"
 fi
 
 echo -e "${BLUE}[3/8] Установка Python 3.10.14...${NC}"
@@ -171,12 +160,12 @@ pip install --upgrade pip -q
 pip install -q -r requirements.txt
 
 echo -e "${BLUE}[7/8] Настройка конфигурации...${NC}"
-# Запрос параметров у пользователя
+# Запрос параметров у пользователя (сохраняем в глобальные переменные)
 SERVER_IP=$(get_server_ip)
 APP_PORT=$(get_port "веб-сервера" 5000)
 STUN_PORT=$(get_port "STUN сервера" 3478)
 
-create_config_file "$SERVER_IP" "$APP_PORT" "$STUN_PORT"
+create_config_file
 
 echo -e "${BLUE}[8/8] Создание systemd сервиса...${NC}"
 create_systemd_service
@@ -210,9 +199,9 @@ echo -e "   🔌 STUN порт: ${GREEN}${STUN_PORT}${NC}"
 echo -e "   📁 Директория: ${GREEN}$(pwd)${NC}"
 echo ""
 echo -e "${BLUE}Доступные адреса:${NC}"
-echo -e "   • ${GREEN}http://${SERVER_IP}:${APP_PORT}${NC} (чат работает)"
-echo -e "   • ${GREEN}https://${SERVER_IP}:${APP_PORT}${NC} (если SSL сгенерирован)"
+echo -e "   • ${GREEN}http://${SERVER_IP}:${APP_PORT}${NC}"
 echo ""
+
 echo -e "${BLUE}Управление сервисом:${NC}"
 echo -e "   • Статус:   ${YELLOW}sudo systemctl status discord-clone${NC}"
 echo -e "   • Запуск:   ${YELLOW}sudo systemctl start discord-clone${NC}"
@@ -220,23 +209,12 @@ echo -e "   • Останов:  ${YELLOW}sudo systemctl stop discord-clone${NC}
 echo -e "   • Логи:     ${YELLOW}sudo journalctl -u discord-clone -f${NC}"
 echo -e "   • Перезапуск: ${YELLOW}sudo systemctl restart discord-clone${NC}"
 echo ""
-echo -e "${YELLOW}Не забудьте открыть порты в firewall:${NC}"
-echo -e "   sudo ufw allow ${APP_PORT}/tcp"
-echo -e "   sudo ufw allow ${STUN_PORT}/udp"
-echo ""
 
-# Опциональный запуск firewall настройки
-echo -e -n "${YELLOW}Хотите автоматически открыть порты в UFW? (y/n): ${NC}"
-read -n 1 reply
-echo
-if [[ $reply =~ ^[Yy]$ ]]; then
-    if command -v ufw &> /dev/null; then
-        sudo ufw allow ${APP_PORT}/tcp
-        sudo ufw allow ${STUN_PORT}/udp
-        echo -e "${GREEN}✅ Порты открыты!${NC}"
-    else
-        echo -e "${YELLOW}⚠️ UFW не установлен. Пропускаем...${NC}"
-    fi
-fi
+# Открытие портов в firewall
+echo -e "${YELLOW}Открываем порты в firewall...${NC}"
+sudo ufw allow ${APP_PORT}/tcp
+sudo ufw allow ${STUN_PORT}/udp
+echo -e "${GREEN}✅ Порты ${APP_PORT}/tcp и ${STUN_PORT}/udp открыты${NC}"
+echo ""
 
 echo -e "${GREEN}🎉 Установка завершена! Откройте в браузере: http://${SERVER_IP}:${APP_PORT}${NC}"
