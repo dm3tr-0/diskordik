@@ -1,8 +1,7 @@
 #!/bin/bash
 
 # Discord Clone - Однострочный установщик для сервера
-# Использование: curl -sSL https://your-server.com/install.sh | bash
-# Или: wget -qO- https://your-server.com/install.sh | bash
+# Использование: curl -sSL https://raw.githubusercontent.com/dm3tr-0/diskordik/main/install.sh | bash
 
 set -e  # Остановка при ошибке
 
@@ -24,13 +23,13 @@ echo -e "${NC}"
 # Функция для запроса IP адреса
 get_server_ip() {
     local ip
-    local default_ip=$(curl -s ifconfig.me 2>/dev/null || curl -s icanhazip.com 2>/dev/null || echo "0.0.0.0")
+    local default_ip=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || curl -s --max-time 3 icanhazip.com 2>/dev/null || echo "0.0.0.0")
     
     echo -e "${YELLOW}Определение IP адреса сервера...${NC}"
     echo -e "${GREEN}Внешний IP сервера: ${default_ip}${NC}"
     echo ""
-    echo -e "${YELLOW}Введите IP адрес для доступа к серверу (оставьте пустым для использования $default_ip):${NC}"
-    read -p "IP адрес: " ip
+    echo -e -n "${YELLOW}Введите IP адрес для доступа к серверу (Enter для $default_ip): ${NC}"
+    read ip
     
     if [ -z "$ip" ]; then
         ip=$default_ip
@@ -51,8 +50,8 @@ get_port() {
     local default_port=$2
     local port
     
-    echo -e "${YELLOW}Введите порт для $port_name (оставьте пустым для $default_port):${NC}"
-    read -p "Порт: " port
+    echo -e -n "${YELLOW}Введите порт для $port_name (Enter для $default_port): ${NC}"
+    read port
     
     if [ -z "$port" ]; then
         port=$default_port
@@ -99,7 +98,7 @@ EOF
     sudo systemctl daemon-reload
     
     # Включение автозапуска
-    sudo systemctl enable ${service_name}.service
+    sudo systemctl enable ${service_name}.service > /dev/null 2>&1
     
     echo -e "${GREEN}✅ Сервис создан и добавлен в автозагрузку${NC}"
     echo -e "${GREEN}   Имя сервиса: ${service_name}${NC}"
@@ -126,22 +125,22 @@ EOF
 
 # Основной процесс установки
 echo -e "${BLUE}[1/8] Обновление системы и установка зависимостей...${NC}"
-sudo apt update
-sudo apt install -y make build-essential libssl-dev zlib1g-dev libbz2-dev \
+sudo apt update -qq
+sudo apt install -y -qq make build-essential libssl-dev zlib1g-dev libbz2-dev \
     libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
-    libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev git net-tools
+    libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev git net-tools ufw
 
 echo -e "${BLUE}[2/8] Установка pyenv...${NC}"
 if [ ! -d "$HOME/.pyenv" ]; then
-    curl https://pyenv.run | bash
+    curl -s https://pyenv.run | bash
 else
     echo -e "${GREEN}pyenv уже установлен${NC}"
 fi
 
 # Настройка pyenv в текущей сессии
 export PATH="$HOME/.pyenv/bin:$PATH"
-eval "$(pyenv init --path)"
-eval "$(pyenv virtualenv-init -)"
+eval "$(pyenv init --path)" 2>/dev/null
+eval "$(pyenv virtualenv-init -)" 2>/dev/null
 
 # Добавление в .bashrc если еще нет
 if ! grep -q "pyenv" ~/.bashrc; then
@@ -157,7 +156,7 @@ pyenv global 3.10.14
 
 echo -e "${BLUE}[4/8] Клонирование репозитория...${NC}"
 if [ ! -d "diskordik" ]; then
-    git clone https://github.com/dm3tr-0/diskordik.git
+    git clone --quiet https://github.com/dm3tr-0/diskordik.git
 fi
 cd diskordik
 
@@ -168,8 +167,8 @@ fi
 source venv/bin/activate
 
 echo -e "${BLUE}[6/8] Установка Python пакетов...${NC}"
-pip install --upgrade pip
-pip install -r requirements.txt
+pip install --upgrade pip -q
+pip install -q -r requirements.txt
 
 echo -e "${BLUE}[7/8] Настройка конфигурации...${NC}"
 # Запрос параметров у пользователя
@@ -227,9 +226,10 @@ echo -e "   sudo ufw allow ${STUN_PORT}/udp"
 echo ""
 
 # Опциональный запуск firewall настройки
-read -p "Хотите автоматически открыть порты в UFW? (y/n): " -n 1 -r
+echo -e -n "${YELLOW}Хотите автоматически открыть порты в UFW? (y/n): ${NC}"
+read -n 1 reply
 echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+if [[ $reply =~ ^[Yy]$ ]]; then
     if command -v ufw &> /dev/null; then
         sudo ufw allow ${APP_PORT}/tcp
         sudo ufw allow ${STUN_PORT}/udp
@@ -238,3 +238,5 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo -e "${YELLOW}⚠️ UFW не установлен. Пропускаем...${NC}"
     fi
 fi
+
+echo -e "${GREEN}🎉 Установка завершена! Откройте в браузере: http://${SERVER_IP}:${APP_PORT}${NC}"
