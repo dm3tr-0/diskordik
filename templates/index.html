@@ -23,9 +23,9 @@
                         <h3 class="username">{{ current_user.username }}</h3>
                         <span class="user-status online">Онлайн</span>
                     </div>
-                    <a href="/logout" class="logout-icon" title="Выйти" 				onclick="event.preventDefault(); showLogoutModal();">
-    			🚪
-		    </a>
+                    <a href="/logout" class="logout-icon" title="Выйти" onclick="event.preventDefault(); showLogoutModal();">
+                        🚪
+                    </a>
                 </div>
             </div>
             
@@ -107,11 +107,6 @@
                             <p>Высокое качество звука</p>
                         </div>
                         <div class="feature-card">
-                            <div class="feature-icon">📹</div>
-                            <h3>Видеозвонки</h3>
-                            <p>Видите своих друзей</p>
-                        </div>
-                        <div class="feature-card">
                             <div class="feature-icon">👥</div>
                             <h3>Друзья</h3>
                             <p>Добавляйте и общайтесь</p>
@@ -121,43 +116,42 @@
             </div>
             
             <div class="chat-container" id="chatContainer" style="display: none;">
-                <div class="chat-header">
-                    <div class="chat-header-info">
-                        <button class="mobile-back-btn" onclick="closeChat()">←</button>
-                        <div class="chat-avatar">
-                            <div class="avatar-medium" id="chatAvatar">
-                                ?
-                            </div>
-                            <span class="online-dot" id="chatStatusDot"></span>
-                        </div>
-                        <div class="chat-user-info">
-                            <h3 id="chatFriendName"></h3>
-                            <span class="chat-status" id="chatFriendStatus">Офлайн</span>
-                        </div>
-                    </div>
-                    <div class="call-actions">
-                        <button class="call-btn" onclick="startCall('audio')" title="Голосовой звонок">
-                            📞
-                        </button>
-                        <button class="call-btn video-call-btn" onclick="startCall('video')" title="Видеозвонок">
-                            📹
-                        </button>
-                    </div>
+    <div class="chat-header">
+        <div class="chat-header-info">
+            <button class="mobile-back-btn" onclick="closeChat()">←</button>
+            <div class="chat-avatar">
+                <div class="avatar-medium" id="chatAvatar">
+                    ?
                 </div>
-                
-                <div class="messages-area" id="messages"></div>
-                
-                <div class="typing-indicator" id="typingIndicator"></div>
-                
-                <div class="message-input-area">
-                    <div class="input-wrapper-modern">
-                        <input type="text" id="messageInput" placeholder="Напишите сообщение..." autocomplete="off">
-                        <button class="send-btn" onclick="sendMessage()">
-                            📩
-                        </button>
-                    </div>
-                </div>
+                <span class="online-dot" id="chatStatusDot"></span>
             </div>
+            <div class="chat-user-info">
+                <h3 id="chatFriendName"></h3>
+                <span class="chat-status" id="chatFriendStatus">Офлайн</span>
+            </div>
+        </div>
+        <div class="call-actions">
+            <button class="call-btn" onclick="startCall('audio')" title="Голосовой звонок">
+                📞
+            </button>
+        </div>
+    </div>
+    
+    <!-- Обертка для сообщений, в которую будет вставляться демонстрация экрана -->
+    <div class="messages-wrapper" id="messagesWrapper">
+        <div class="messages-area" id="messages"></div>
+        <div class="typing-indicator" id="typingIndicator"></div>
+    </div>
+    
+    <div class="message-input-area">
+        <div class="input-wrapper-modern">
+            <input type="text" id="messageInput" placeholder="Напишите сообщение..." autocomplete="off">
+            <button class="send-btn" onclick="sendMessage()">
+                📩
+            </button>
+        </div>
+    </div>
+</div>
         </div>
     </div>
 </div>
@@ -308,41 +302,6 @@ function setupSearchListeners() {
     }
 }
 
-function setupMessageInput() {
-    const input = document.getElementById('messageInput');
-    if (!input) return;
-    
-    input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
-    
-    input.addEventListener('input', () => {
-        if (currentChatId && socket) {
-            if (!isTyping) {
-                isTyping = true;
-                socket.emit('typing', {
-                    receiver_id: currentChatId,
-                    is_typing: true
-                });
-            }
-            
-            clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(() => {
-                isTyping = false;
-                if (socket) {
-                    socket.emit('typing', {
-                        receiver_id: currentChatId,
-                        is_typing: false
-                    });
-                }
-            }, 1000);
-        }
-    });
-}
-
 function loadFriendsList() {
     fetch('/get_friends_list')
         .then(res => res.json())
@@ -374,7 +333,7 @@ function loadFriendsList() {
                     `).join('');
                 }
             }
-	    setupFriendContextMenu();
+            setupFriendContextMenu();
         });
 }
 
@@ -452,24 +411,7 @@ function closeChat() {
     });
 }
 
-function loadMessages(friendId) {
-    fetch(`/get_messages/${friendId}`)
-        .then(res => res.json())
-        .then(data => {
-            const messagesDiv = document.getElementById('messages');
-            if (messagesDiv) {
-                messagesDiv.innerHTML = '';
-                
-                data.messages.forEach(message => {
-                    addMessage(message);
-                });
-                
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            }
-        })
-        .catch(err => console.error('Error loading messages:', err));
-}
-
+// Добавьте эту функцию для обновления отображения сообщений
 function addMessage(data) {
     const messagesDiv = document.getElementById('messages');
     if (!messagesDiv) return;
@@ -491,6 +433,61 @@ function addMessage(data) {
     
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// Обновите функцию loadMessages
+function loadMessages(friendId) {
+    fetch(`/get_messages/${friendId}`)
+        .then(res => res.json())
+        .then(data => {
+            const messagesDiv = document.getElementById('messages');
+            if (messagesDiv) {
+                messagesDiv.innerHTML = '';
+                
+                data.messages.forEach(message => {
+                    addMessage(message);
+                });
+                
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        })
+        .catch(err => console.error('Error loading messages:', err));
+}
+
+// Обновите код в setupMessageInput для typing indicator
+function setupMessageInput() {
+    const input = document.getElementById('messageInput');
+    if (!input) return;
+    
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    input.addEventListener('input', () => {
+        if (currentChatId && socket) {
+            if (!isTyping) {
+                isTyping = true;
+                socket.emit('typing', {
+                    receiver_id: currentChatId,
+                    is_typing: true
+                });
+            }
+            
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                isTyping = false;
+                if (socket) {
+                    socket.emit('typing', {
+                        receiver_id: currentChatId,
+                        is_typing: false
+                    });
+                }
+            }, 1000);
+        }
+    });
 }
 
 function sendMessage() {

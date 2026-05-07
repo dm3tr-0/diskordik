@@ -65,7 +65,7 @@
         </div>
     </div>
 
-    <!-- Глобальное модальное окно для входящего звонка -->
+    <!-- Глобальное модальное окно для входящего звонка (только аудио) -->
     <div id="globalCallModal" class="call-modal-modern" style="display: none;">
         <div class="call-modal-content">
             <div class="call-modal-header">
@@ -74,9 +74,6 @@
                 </div>
                 <h3 id="modalCallerName">Входящий звонок...</h3>
                 <p id="modalCallStatus" class="call-status-text">Звонок...</p>
-            </div>
-            <div id="modalVideoContainer" class="video-preview" style="display: none;">
-                <video id="modalLocalVideo" class="local-video-preview" autoplay muted playsinline></video>
             </div>
             <div class="call-modal-actions" id="modalCallButtons"></div>
         </div>
@@ -160,6 +157,9 @@
             closeLogoutModal();
         }
     });
+
+    window.currentUsername = "{{ current_user.username if current_user.is_authenticated else '' }}";
+    window.currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
     </script>
     
     <script src="{{ url_for('static', filename='call.js') }}"></script>

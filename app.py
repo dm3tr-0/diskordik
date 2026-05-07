@@ -383,11 +383,12 @@ def handle_typing(data):
     }, room=f'user_{receiver_id}')
 
 
-# WebRTC сигналинг
+# WebRTC сигналинг (только аудио)
 @socketio.on('call_user')
 def handle_call_user(data):
     receiver_id = data['receiver_id']
-    call_type = data.get('call_type', 'audio')
+    # Всегда только аудио
+    call_type = 'audio'
     
     # Создаем запись о звонке
     call = Call(
@@ -512,6 +513,48 @@ def handle_webrtc_ice_candidate(data):
         'sender_id': current_user.id,
         'call_id': call_id
     }, room=f'user_{target_user}')
+
+
+# Демонстрация экрана (Screen Share) - обновленные
+@socketio.on('screen_share_started')
+def handle_screen_share_started(data):
+    call_id = data['call_id']
+    sender_id = data['sender_id']
+    sender_name = data['sender_name']
+    
+    print(f"Screen share started: call_id={call_id}, sender_id={sender_id}")
+    
+    call = db.session.get(Call, call_id)
+    if call:
+        # Определяем получателя
+        receiver_id = call.receiver_id if call.caller_id == sender_id else call.caller_id
+        
+        print(f"Sending screen_share_started to user_{receiver_id}")
+        
+        emit('screen_share_started', {
+            'call_id': call_id,
+            'sender_id': sender_id,
+            'sender_name': sender_name
+        }, room=f'user_{receiver_id}')
+
+
+@socketio.on('screen_share_stopped')
+def handle_screen_share_stopped(data):
+    call_id = data['call_id']
+    sender_id = data['sender_id']
+    
+    print(f"Screen share stopped: call_id={call_id}, sender_id={sender_id}")
+    
+    call = db.session.get(Call, call_id)
+    if call:
+        receiver_id = call.receiver_id if call.caller_id == sender_id else call.caller_id
+        
+        print(f"Sending screen_share_stopped to user_{receiver_id}")
+        
+        emit('screen_share_stopped', {
+            'call_id': call_id,
+            'sender_id': sender_id
+        }, room=f'user_{receiver_id}')
 
 
 def generate_self_signed_certificate():
