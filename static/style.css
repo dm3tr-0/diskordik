@@ -3133,3 +3133,134 @@ body.keyboard-open .messages-area {
     background: #5b6eae;
     transform: scale(1.05);
 }
+
+/* ========== СТИЛИ ДЛЯ ИНДИКАТОРА КАЧЕСТВА ВИДЕО ========== */
+
+.screen-share-quality-control {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 6px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(5px);
+    z-index: 10;
+    font-family: monospace;
+    font-size: 11px;
+}
+
+.quality-badge {
+    background: #2ecc71;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: help;
+    transition: all 0.2s;
+}
+
+.quality-stats {
+    display: flex;
+    gap: 12px;
+    color: #e0e0e0;
+    font-size: 11px;
+}
+
+.quality-stats span {
+    white-space: nowrap;
+}
+
+.own-quality-stats {
+    display: flex;
+    gap: 16px;
+    font-family: monospace;
+}
+
+/* Адаптив для мобильных */
+@media (max-width: 768px) {
+    .screen-share-quality-control {
+        bottom: 8px;
+        left: 8px;
+        padding: 4px 8px;
+        font-size: 9px;
+        gap: 6px;
+    }
+    
+    .quality-stats {
+        gap: 6px;
+        font-size: 9px;
+    }
+    
+    .quality-badge {
+        padding: 2px 6px;
+        font-size: 9px;
+    }
+    
+    .own-quality-stats {
+        gap: 12px;
+        font-size: 9px;
+    }
+}
+
+/* ========== ПРОСТАЯ КНОПКА ВКЛ/ВЫКЛ ЗВУКОВ ========== */
+
+.sound-toggle-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #2c2f33;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 1100;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.sound-toggle-btn:hover {
+    background: #7289da;
+    transform: scale(1.05);
+}
+
+.sound-toast {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    background: #2c2f33;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 1200;
+    pointer-events: none;
+    animation: fadeOut 2s ease forwards;
+}
+
+@keyframes fadeOut {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; visibility: hidden; }
+}
+
+@media (max-width: 768px) {
+    .sound-toggle-btn {
+        bottom: 10px;
+        right: 10px;
+        width: 42px;
+        height: 42px;
+        font-size: 20px;
+    }
+
+    .sound-toast {
+        bottom: 70px;
+        right: 10px;
+        font-size: 11px;
+    }
+}

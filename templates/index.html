@@ -147,7 +147,7 @@
         <div class="input-wrapper-modern">
             <input type="text" id="messageInput" placeholder="Напишите сообщение..." autocomplete="off">
             <button class="send-btn" onclick="sendMessage()">
-                📩
+                ➤
             </button>
         </div>
     </div>
@@ -213,15 +213,28 @@ function setupSocketListeners() {
     // Получение новых сообщений
     socket.on('new_message', (data) => {
         console.log('New message received:', data);
-        
+
+        // Звук нового сообщения (если сообщение не от нас)
+        if (data.sender_id !== currentUserId) {
+            // Если чат не активен или страница не в фокусе
+            const isChatActive = (currentChatId === data.sender_id);
+            const isPageVisible = document.visibilityState === 'visible';
+
+            if (!isChatActive || !isPageVisible) {
+                if (typeof playNewMessageSound === 'function') {
+                    playNewMessageSound();
+                }
+            }
+        }
+
         // Всегда добавляем сообщение в текущий чат, если оно для него
         if (currentChatId && (data.sender_id === currentChatId || data.sender_id === currentUserId)) {
             addMessage(data);
         }
-        
-        // Обновляем список друзей для отображения последнего сообщения
+
+        // Обновляем список друзей
         updateFriendsListWithNewMessage(data);
-        
+
         // Уведомление
         if (data.sender_id !== currentUserId && currentChatId !== data.sender_id) {
             showNotification('Новое сообщение', `${data.sender_name}: ${data.content}`);
@@ -411,7 +424,6 @@ function closeChat() {
     });
 }
 
-// Добавьте эту функцию для обновления отображения сообщений
 function addMessage(data) {
     const messagesDiv = document.getElementById('messages');
     if (!messagesDiv) return;
@@ -435,7 +447,6 @@ function addMessage(data) {
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-// Обновите функцию loadMessages
 function loadMessages(friendId) {
     fetch(`/get_messages/${friendId}`)
         .then(res => res.json())
@@ -454,7 +465,6 @@ function loadMessages(friendId) {
         .catch(err => console.error('Error loading messages:', err));
 }
 
-// Обновите код в setupMessageInput для typing indicator
 function setupMessageInput() {
     const input = document.getElementById('messageInput');
     if (!input) return;

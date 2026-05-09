@@ -11,20 +11,37 @@ let isScreenSharing = false;
 let screenShareStream = null;
 let screenShareSender = null;
 let isRemoteScreenSharing = false;
-let screenShareManuallyClosed = false; // Флаг, что пользователь закрыл демонстрацию вручную
+let screenShareManuallyClosed = false;
 
-// Новые переменные для пинга и громкости
+// Новые переменные для пинга, громкости и адаптивного качества
 let pingInterval = null;
 let currentPing = 0;
 let remoteAudioGains = new Map();
 let currentRemoteAudioElement = null;
 let currentRemoteStream = null;
 
+// Переменные для адаптивного качества (60-120 FPS)
+let qualityAdaptationInterval = null;
+let currentQuality = 'high'; // 'high', 'medium', 'low', 'min'
+let currentBitrate = 5000000; // 5 Mbps для 120 FPS
+let lastFps = 60;
+let frameCallbackHandle = null;
+let frameCount = 0;
+let lastFrameTime = 0;
+
+// Конфигурация качества
+const qualityConfigs = {
+    high: { bitrate: 5000000, name: 'Высокое (120 FPS)', targetFps: 120 },
+    medium: { bitrate: 2500000, name: 'Среднее (60 FPS)', targetFps: 60 },
+    low: { bitrate: 1000000, name: 'Низкое (60 FPS)', targetFps: 60 },
+    min: { bitrate: 500000, name: 'Минимальное (~30 FPS)', targetFps: 30 }
+};
+
 // Переменные для демонстрации экрана
 let screenShareStreams = new Map();
 let remoteScreenShareStream = null;
 let screenShareMinimized = false;
-let currentScreenShareSenderName = ''; // Имя того, кто демонстрирует
+let currentScreenShareSenderName = '';
 
 // STUN/TURN серверы
 let configuration = {
@@ -50,10 +67,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function setupCallSocketListeners() {
     if (!socket) return;
-    
+
     socket.on('incoming_call', (data) => {
         console.log('Входящий звонок:', data);
         if (!isCallActive) {
+            // Воспроизводим звук входящего звонка
+            if (typeof startIncomingCallRing === 'function') {
+                startIncomingCallRing();
+            }
             showGlobalCallModal(data);
         }
     });
@@ -73,16 +94,25 @@ function setupCallSocketListeners() {
     socket.on('call_accepted', (data) => {
         console.log('Звонок принят:', data);
         if (data.call_id === globalCurrentCallId && !hasAcceptedCall) {
+            // Останавливаем звук звонка
+            if (typeof stopIncomingCallRing === 'function') {
+                stopIncomingCallRing();
+            }
             hasAcceptedCall = true;
             updateCallWidgetStatus('Соединение...');
             createAndSendOffer();
             startPingMeasurement();
+            startQualityAdaptation();
         }
     });
 
     socket.on('call_rejected', (data) => {
         console.log('Звонок отклонен:', data);
         if (data.call_id === globalCurrentCallId) {
+            // Останавливаем звук звонка
+            if (typeof stopIncomingCallRing === 'function') {
+                stopIncomingCallRing();
+            }
             updateCallWidgetStatus('Звонок отклонен');
             showNotification('Звонок отклонен', 'Пользователь отклонил вызов');
             setTimeout(() => endGlobalCall(), 2000);
@@ -92,6 +122,10 @@ function setupCallSocketListeners() {
     socket.on('call_ended', (data) => {
         console.log('Звонок завершен:', data);
         if (data.call_id === globalCurrentCallId) {
+            // Останавливаем звук звонка (на всякий случай)
+            if (typeof stopIncomingCallRing === 'function') {
+                stopIncomingCallRing();
+            }
             updateCallWidgetStatus('Звонок завершен');
             if (hasAcceptedCall) {
                 showNotification('Звонок завершен', 'Собеседник завершил разговор');
@@ -105,9 +139,10 @@ function setupCallSocketListeners() {
         if (data.call_id === globalCurrentCallId && data.sender_id !== currentUserId) {
             isRemoteScreenSharing = true;
             currentScreenShareSenderName = data.sender_name;
-            screenShareManuallyClosed = false; // Сбрасываем флаг при новой демонстрации
+            screenShareManuallyClosed = false;
             showScreenShareInChat(data.sender_name);
             showNotification('Демонстрация экрана', `${data.sender_name} начал демонстрацию экрана`);
+            showQualityIndicator();
         }
     });
 
@@ -117,6 +152,7 @@ function setupCallSocketListeners() {
             isRemoteScreenSharing = false;
             currentScreenShareSenderName = '';
             hideScreenShareInChat();
+            hideQualityIndicator();
             showNotification('Демонстрация завершена', 'Пользователь остановил демонстрацию экрана');
         }
     });
@@ -185,6 +221,11 @@ function showGlobalCallModal(data) {
 }
 
 function acceptCallFromModal() {
+    // Останавливаем звук звонка
+    if (typeof stopIncomingCallRing === 'function') {
+        stopIncomingCallRing();
+    }
+
     const constraints = { audio: true, video: false };
 
     navigator.mediaDevices.getUserMedia(constraints)
@@ -220,6 +261,9 @@ function acceptCallFromModal() {
 }
 
 function rejectCallFromModal() {
+    if (typeof stopIncomingCallRing === 'function') {
+        stopIncomingCallRing();
+    }
     if (socket) {
         socket.emit('reject_call', { call_id: globalCurrentCallId });
     }
@@ -319,11 +363,11 @@ function createGlobalPeerConnection() {
             console.log('Получен видеопоток демонстрации!');
             if (event.streams[0]) {
                 remoteScreenShareStream = event.streams[0];
-                // Если демонстрация активна и пользователь не закрыл её вручную
                 if (isRemoteScreenSharing && !screenShareManuallyClosed) {
                     displayScreenShareVideo(event.streams[0]);
+                    // Запускаем измерение FPS для полученного видео
+                    startFpsMeasurementForRemoteVideo();
                 } else if (isRemoteScreenSharing && screenShareManuallyClosed) {
-                    // Показываем кнопку восстановления
                     showReconnectButton();
                 }
             }
@@ -336,6 +380,7 @@ function createGlobalPeerConnection() {
             case 'connected':
                 updateCallWidgetStatus('Разговор');
                 startPingMeasurement();
+                startQualityAdaptation();
                 showDiscordCallPanel();
                 break;
             case 'disconnected':
@@ -370,11 +415,9 @@ function setupRemoteAudio(stream) {
 }
 
 function showReconnectButton() {
-    // Удаляем существующую кнопку если есть
     const existingBtn = document.getElementById('reconnectScreenShareBtn');
     if (existingBtn) existingBtn.remove();
     
-    // Создаем кнопку восстановления в области сообщений
     const messagesWrapper = document.querySelector('.messages-wrapper');
     if (!messagesWrapper) return;
     
@@ -387,14 +430,12 @@ function showReconnectButton() {
     `;
     
     reconnectBtn.querySelector('.reconnect-action-btn').addEventListener('click', () => {
-        // Убираем флаг ручного закрытия
         screenShareManuallyClosed = false;
-        // Показываем демонстрацию
         showScreenShareInChat(currentScreenShareSenderName);
         if (remoteScreenShareStream) {
             displayScreenShareVideo(remoteScreenShareStream);
+            startFpsMeasurementForRemoteVideo();
         }
-        // Удаляем кнопку восстановления
         reconnectBtn.remove();
     });
     
@@ -402,15 +443,12 @@ function showReconnectButton() {
 }
 
 function showScreenShareInChat(senderName) {
-    // Удаляем кнопку восстановления если есть
     const reconnectBtn = document.getElementById('reconnectScreenShareBtn');
     if (reconnectBtn) reconnectBtn.remove();
     
-    // Проверяем, есть ли уже контейнер для демонстрации
     let screenContainer = document.getElementById('screenShareContainer');
     
     if (!screenContainer) {
-        // Создаем контейнер в обертке сообщений
         const messagesWrapper = document.querySelector('.messages-wrapper');
         if (!messagesWrapper) return;
         
@@ -435,13 +473,18 @@ function showScreenShareInChat(senderName) {
                     <input type="range" id="screenShareVolumeSlider" class="volume-slider-small" min="0" max="200" value="100" step="1">
                     <span id="screenShareVolumeValue">100%</span>
                 </div>
+                <div class="screen-share-quality-control" id="qualityIndicator" style="display: none;">
+                    <span class="quality-badge" id="qualityBadge">📊 60 FPS</span>
+                    <div class="quality-stats" id="qualityStats">
+                        <span>📈 Битрейт: <span id="bitrateValue">0</span> Mbps</span>
+                        <span>⚡ Пинг: <span id="pingValue">0</span> ms</span>
+                    </div>
+                </div>
             </div>
         `;
         
-        // Вставляем в начало обертки сообщений
         messagesWrapper.insertBefore(screenContainer, messagesWrapper.firstChild);
         
-        // Добавляем обработчики
         const minimizeBtn = document.getElementById('screenShareMinimizeBtn');
         const closeBtn = document.getElementById('screenShareCloseBtn');
         const volumeSlider = document.getElementById('screenShareVolumeSlider');
@@ -453,14 +496,12 @@ function showScreenShareInChat(senderName) {
         
         if (closeBtn) {
             closeBtn.addEventListener('click', () => {
-                // Устанавливаем флаг, что пользователь закрыл демонстрацию вручную
                 screenShareManuallyClosed = true;
-                // Скрываем контейнер
                 if (screenContainer) screenContainer.remove();
-                // Показываем кнопку восстановления
                 if (isRemoteScreenSharing) {
                     showReconnectButton();
                 }
+                hideQualityIndicator();
             });
         }
         
@@ -481,14 +522,14 @@ function showScreenShareInChat(senderName) {
         }
     }
     
-    // Если уже есть поток, отображаем его
     if (remoteScreenShareStream) {
         displayScreenShareVideo(remoteScreenShareStream);
+        startFpsMeasurementForRemoteVideo();
     }
     
-    // Показываем контейнер
     screenContainer.style.display = 'block';
     screenContainer.classList.remove('minimized');
+    showQualityIndicator();
 }
 
 function displayScreenShareVideo(stream) {
@@ -497,7 +538,6 @@ function displayScreenShareVideo(stream) {
         video.srcObject = stream;
         video.style.display = 'block';
         
-        // Убираем индикатор загрузки если есть
         const loadingIndicator = document.querySelector('.screen-share-loading');
         if (loadingIndicator) loadingIndicator.remove();
     }
@@ -521,7 +561,6 @@ function toggleScreenShareMinimize() {
 function hideScreenShareInChat() {
     const container = document.getElementById('screenShareContainer');
     if (container) {
-        // Останавливаем видео
         const video = document.getElementById('screenShareVideo');
         if (video && video.srcObject) {
             video.srcObject = null;
@@ -529,88 +568,232 @@ function hideScreenShareInChat() {
         container.remove();
     }
     
-    // Удаляем кнопку восстановления
     const reconnectBtn = document.getElementById('reconnectScreenShareBtn');
     if (reconnectBtn) reconnectBtn.remove();
+    
+    hideQualityIndicator();
+    stopFpsMeasurement();
 }
 
-async function createAndSendOffer() {
-    if (!globalPeerConnection) {
-        createGlobalPeerConnection();
-    }
-    
-    if (globalLocalStream && globalPeerConnection.getSenders().length === 0) {
-        globalLocalStream.getTracks().forEach(track => {
-            globalPeerConnection.addTrack(track, globalLocalStream);
-        });
-    }
+// ========== ФУНКЦИИ ДЛЯ АДАПТИВНОГО КАЧЕСТВА ВИДЕО (ДЛЯ ДЕМОНСТРАЦИИ) ==========
 
-    try {
-        const offer = await globalPeerConnection.createOffer();
-        await globalPeerConnection.setLocalDescription(offer);
-        
-        if (socket && globalCurrentCallId && hasAcceptedCall) {
-            socket.emit('webrtc_offer', {
-                target_user_id: currentChatId,
-                offer: offer,
-                call_id: globalCurrentCallId
-            });
+function startQualityAdaptation() {
+    if (qualityAdaptationInterval) clearInterval(qualityAdaptationInterval);
+    qualityAdaptationInterval = setInterval(() => {
+        if (isScreenSharing && globalPeerConnection && globalPeerConnection.connectionState === 'connected') {
+            adaptVideoQuality();
         }
-    } catch (err) {
-        console.error('Ошибка создания offer:', err);
+    }, 3000);
+}
+
+function stopQualityAdaptation() {
+    if (qualityAdaptationInterval) {
+        clearInterval(qualityAdaptationInterval);
+        qualityAdaptationInterval = null;
     }
 }
 
-async function handleRemoteOffer(data) {
-    if (!globalPeerConnection) {
-        createGlobalPeerConnection();
-    }
+async function adaptVideoQuality() {
+    if (!globalPeerConnection) return;
     
-    if (globalLocalStream && globalPeerConnection.getSenders().length === 0) {
-        globalLocalStream.getTracks().forEach(track => {
-            globalPeerConnection.addTrack(track, globalLocalStream);
-        });
-    }
-
     try {
-        await globalPeerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await globalPeerConnection.createAnswer();
-        await globalPeerConnection.setLocalDescription(answer);
+        const senders = globalPeerConnection.getSenders();
+        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
         
-        if (socket && hasAcceptedCall) {
-            socket.emit('webrtc_answer', {
-                caller_id: data.caller_id,
-                answer: answer,
-                call_id: globalCurrentCallId
-            });
+        if (!videoSender) return;
+        
+        // Определяем новое качество на основе пинга
+        let newQuality = currentQuality;
+        
+        if (currentPing > 300) {
+            newQuality = 'min';
+        } else if (currentPing > 200) {
+            newQuality = 'low';
+        } else if (currentPing > 100) {
+            newQuality = 'medium';
+        } else {
+            newQuality = 'high';
         }
+        
+        // Плавно меняем качество только если оно изменилось
+        if (newQuality !== currentQuality) {
+            currentQuality = newQuality;
+            const config = qualityConfigs[currentQuality];
+            currentBitrate = config.bitrate;
+            
+            await setVideoBitrate(videoSender, currentBitrate);
+            
+            updateQualityIndicator(currentQuality, currentPing, currentBitrate);
+            
+            console.log(`Адаптация качества: ${config.name}, битрейт=${currentBitrate/1000000} Mbps, пинг=${currentPing}ms`);
+        }
+        
+        // Дополнительно: если FPS низкий, а пинг хороший, повышаем качество
+        if (lastFps < 45 && currentPing < 100 && currentQuality !== 'high') {
+            currentQuality = 'high';
+            currentBitrate = qualityConfigs.high.bitrate;
+            await setVideoBitrate(videoSender, currentBitrate);
+            updateQualityIndicator(currentQuality, currentPing, currentBitrate);
+            console.log(`Повышение качества из-за низкого FPS (${lastFps})`);
+        }
+        
     } catch (err) {
-        console.error('Ошибка обработки offer:', err);
+        console.error('Ошибка адаптации качества:', err);
     }
 }
 
-function toggleMute() {
-    isMuted = !isMuted;
-    if (globalLocalStream) {
-        globalLocalStream.getAudioTracks().forEach(track => track.enabled = !isMuted);
+async function setVideoBitrate(sender, bitrate) {
+    try {
+        const parameters = sender.getParameters();
+        if (!parameters.encodings) {
+            parameters.encodings = [{}];
+        }
+        parameters.encodings[0].maxBitrate = bitrate;
+        await sender.setParameters(parameters);
+        console.log(`Установлен битрейт видео: ${bitrate/1000000} Mbps`);
+    } catch (err) {
+        console.error('Ошибка установки битрейта:', err);
     }
-    const muteBtn = document.getElementById('muteBtn');
-    if (muteBtn) muteBtn.textContent = isMuted ? '🔇' : '🎤';
-    
-    const panelMuteBtn = document.getElementById('discordMuteBtn');
-    if (panelMuteBtn) panelMuteBtn.textContent = isMuted ? '🔇' : '🎤';
 }
 
-function toggleSpeaker() {
-    isSpeakerOff = !isSpeakerOff;
-    const audioElement = document.getElementById('globalRemoteAudio');
-    if (audioElement) audioElement.muted = isSpeakerOff;
-    const speakerBtn = document.getElementById('speakerBtn');
-    if (speakerBtn) speakerBtn.textContent = isSpeakerOff ? '🔇' : '🔊';
+// Измерение FPS для отправляемого видео (своя демонстрация)
+function startFpsMeasurementForScreenShare(videoTrack) {
+    if (!videoTrack) return;
     
-    const panelSpeakerBtn = document.getElementById('discordSpeakerBtn');
-    if (panelSpeakerBtn) panelSpeakerBtn.textContent = isSpeakerOff ? '🔇' : '🔊';
+    frameCount = 0;
+    lastFrameTime = performance.now();
+    
+    if (frameCallbackHandle) {
+        videoTrack.requestVideoFrameCallback = null;
+    }
+    
+    const measureFps = (now, metadata) => {
+        frameCount++;
+        
+        const elapsed = now - lastFrameTime;
+        if (elapsed >= 1000) {
+            lastFps = Math.round((frameCount * 1000) / elapsed);
+            frameCount = 0;
+            lastFrameTime = now;
+            
+            // Обновляем индикатор качества если он виден
+            updateLocalFpsDisplay(lastFps);
+        }
+        
+        if (videoTrack.requestVideoFrameCallback) {
+            frameCallbackHandle = videoTrack.requestVideoFrameCallback(measureFps);
+        }
+    };
+    
+    if (videoTrack.requestVideoFrameCallback) {
+        frameCallbackHandle = videoTrack.requestVideoFrameCallback(measureFps);
+    }
 }
+
+function updateLocalFpsDisplay(fps) {
+    const qualityBadge = document.getElementById('qualityBadge');
+    if (qualityBadge && isScreenSharing) {
+        qualityBadge.innerHTML = `🎬 ${fps} FPS`;
+        if (fps >= 90) {
+            qualityBadge.style.background = '#2ecc71';
+        } else if (fps >= 60) {
+            qualityBadge.style.background = '#f1c40f';
+            qualityBadge.style.color = '#333';
+        } else {
+            qualityBadge.style.background = '#e74c3c';
+        }
+    }
+}
+
+// Измерение FPS для получаемого видео (демонстрация собеседника)
+function startFpsMeasurementForRemoteVideo() {
+    const video = document.getElementById('screenShareVideo');
+    if (!video) return;
+    
+    if (video.requestVideoFrameCallback) {
+        let frameCountRemote = 0;
+        let lastTimeRemote = performance.now();
+        
+        const measureRemoteFps = (now, metadata) => {
+            frameCountRemote++;
+            
+            const elapsed = now - lastTimeRemote;
+            if (elapsed >= 1000) {
+                const fps = Math.round((frameCountRemote * 1000) / elapsed);
+                frameCountRemote = 0;
+                lastTimeRemote = now;
+                
+                updateRemoteFpsDisplay(fps);
+            }
+            
+            video.requestVideoFrameCallback(measureRemoteFps);
+        };
+        
+        video.requestVideoFrameCallback(measureRemoteFps);
+    }
+}
+
+function updateRemoteFpsDisplay(fps) {
+    const qualityBadge = document.getElementById('qualityBadge');
+    if (qualityBadge && isRemoteScreenSharing) {
+        qualityBadge.innerHTML = `🎬 ${fps} FPS`;
+        if (fps >= 90) {
+            qualityBadge.style.background = '#2ecc71';
+        } else if (fps >= 60) {
+            qualityBadge.style.background = '#f1c40f';
+            qualityBadge.style.color = '#333';
+        } else {
+            qualityBadge.style.background = '#e74c3c';
+        }
+    }
+}
+
+function stopFpsMeasurement() {
+    if (frameCallbackHandle && globalPeerConnection) {
+        const senders = globalPeerConnection.getSenders();
+        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        if (videoSender && videoSender.track && videoSender.track.cancelVideoFrameCallback) {
+            videoSender.track.cancelVideoFrameCallback(frameCallbackHandle);
+        }
+        frameCallbackHandle = null;
+    }
+}
+
+function showQualityIndicator() {
+    const indicator = document.getElementById('qualityIndicator');
+    if (indicator) {
+        indicator.style.display = 'flex';
+    }
+}
+
+function hideQualityIndicator() {
+    const indicator = document.getElementById('qualityIndicator');
+    if (indicator) {
+        indicator.style.display = 'none';
+    }
+}
+
+function updateQualityIndicator(quality, ping, bitrate) {
+    const qualityBadge = document.getElementById('qualityBadge');
+    const bitrateSpan = document.getElementById('bitrateValue');
+    const pingSpan = document.getElementById('pingValue');
+    
+    if (qualityBadge) {
+        const config = qualityConfigs[quality];
+        qualityBadge.innerHTML = `📊 ${config.name}`;
+        qualityBadge.title = `${config.targetFps} FPS, ${config.bitrate/1000000} Mbps`;
+    }
+    
+    if (bitrateSpan) {
+        bitrateSpan.textContent = (bitrate / 1000000).toFixed(1);
+    }
+    
+    if (pingSpan) {
+        pingSpan.textContent = ping;
+    }
+}
+
+// ========== ФУНКЦИИ ДЛЯ ДЕМОНСТРАЦИИ ЭКРАНА (ОБНОВЛЕННЫЕ) ==========
 
 async function startScreenShare() {
     if (!globalPeerConnection || !isCallActive) {
@@ -624,16 +807,19 @@ async function startScreenShare() {
     }
     
     try {
-        console.log('Запрос демонстрации экрана...');
+        console.log('Запрос демонстрации экрана с аудио...');
         
         const stream = await navigator.mediaDevices.getDisplayMedia({
             video: {
-                cursor: "always"
+                cursor: "always",
+                frameRate: { ideal: 120, max: 120 } // Запрашиваем 120 FPS
             },
-            audio: true
+            audio: true // Включаем захват аудио с экрана
         });
         
         console.log('Получен поток демонстрации');
+        console.log('Аудио треки:', stream.getAudioTracks().length);
+        console.log('Видео треки:', stream.getVideoTracks().length);
         
         screenShareStream = stream;
         isScreenSharing = true;
@@ -641,22 +827,65 @@ async function startScreenShare() {
         const videoTrack = screenShareStream.getVideoTracks()[0];
         
         if (videoTrack) {
+            // Настраиваем параметры видео для высокого FPS
+            const constraints = {
+                frameRate: { exact: 120 },
+                resizeMode: "rescale"
+            };
+            
+            try {
+                await videoTrack.applyConstraints(constraints);
+                console.log('Применены ограничения видео: 120 FPS');
+            } catch (e) {
+                console.warn('Не удалось установить 120 FPS, используется стандартное значение:', e);
+            }
+            
+            // Запускаем измерение FPS
+            startFpsMeasurementForScreenShare(videoTrack);
+            
             const senders = globalPeerConnection.getSenders();
             let videoSender = senders.find(s => s.track && s.track.kind === 'video');
             
             if (videoSender) {
                 await videoSender.replaceTrack(videoTrack);
+                console.log('Видео трек заменен');
             } else {
                 screenShareSender = globalPeerConnection.addTrack(videoTrack, screenShareStream);
+                console.log('Видео трек добавлен');
+            }
+            
+            // Устанавливаем начальный высокий битрейт для 120 FPS
+            if (videoSender) {
+                await setVideoBitrate(videoSender, qualityConfigs.high.bitrate);
+                currentQuality = 'high';
+                currentBitrate = qualityConfigs.high.bitrate;
             }
         }
         
+        // Добавляем аудио с демонстрации экрана
         const audioTrack = screenShareStream.getAudioTracks()[0];
         if (audioTrack) {
-            globalPeerConnection.addTrack(audioTrack, screenShareStream);
+            console.log('Аудио трек найден, добавляем в соединение');
+            
+            // Проверяем, есть ли уже аудио отправитель
+            const senders = globalPeerConnection.getSenders();
+            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+            
+            if (audioSender && audioSender.track) {
+                // Заменяем существующий аудио трек (микрофон) на системный
+                // Но лучше добавить отдельно? WebRTC поддерживает только один аудио трек
+                // Поэтому мы заменяем микрофон на системный звук во время демонстрации
+                await audioSender.replaceTrack(audioTrack);
+                console.log('Аудио трек (системный) заменен вместо микрофона');
+            } else {
+                globalPeerConnection.addTrack(audioTrack, screenShareStream);
+                console.log('Аудио трек добавлен');
+            }
+        } else {
+            console.warn('Аудио трек не найден. Возможно, система не поддерживает захват звука с экрана');
+            showNotification('Предупреждение', 'Звук с экрана не будет транслироваться (система не поддерживает)');
         }
         
-        // Показываем индикатор своей демонстрации в чате
         showOwnScreenShareIndicator();
         
         if (socket && globalCurrentCallId) {
@@ -673,9 +902,10 @@ async function startScreenShare() {
             stopScreenShare();
         };
         
+        // Пересоздаем offer после изменения треков
         await renegotiateConnection();
         
-        showNotification('Демонстрация экрана', 'Демонстрация начата');
+        showNotification('Демонстрация экрана', 'Демонстрация начата (60-120 FPS, аудио с экрана)');
         
     } catch (err) {
         console.error('Ошибка запуска демонстрации экрана:', err);
@@ -701,8 +931,12 @@ function showOwnScreenShareIndicator() {
         indicator.className = 'own-screen-share-indicator';
         indicator.innerHTML = `
             <div class="own-screen-share-content">
-                <span>🖥️ Вы демонстрируете экран</span>
+                <span>🖥️ Вы демонстрируете экран (адаптивное качество 60-120 FPS)</span>
                 <button class="stop-share-btn" id="stopOwnScreenShareBtn">Остановить</button>
+            </div>
+            <div class="own-quality-stats" style="font-size: 11px; margin-top: 6px; opacity: 0.8;">
+                <span id="localFpsDisplay">📊 FPS: --</span>
+                <span id="localPingDisplay">⚡ Пинг: ${currentPing} ms</span>
             </div>
         `;
         
@@ -753,14 +987,18 @@ function stopScreenShare() {
         screenShareStream = null;
     }
     
-    if (globalPeerConnection) {
+    // Восстанавливаем микрофон
+    if (globalLocalStream) {
         const senders = globalPeerConnection.getSenders();
-        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-        if (videoSender && videoSender.track) {
-            videoSender.track.stop();
+        const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+        const micAudioTrack = globalLocalStream.getAudioTracks()[0];
+        
+        if (audioSender && micAudioTrack) {
+            audioSender.replaceTrack(micAudioTrack).catch(e => console.warn('Не удалось восстановить микрофон:', e));
         }
     }
     
+    stopFpsMeasurement();
     hideOwnScreenShareIndicator();
     
     if (socket && globalCurrentCallId) {
@@ -785,20 +1023,29 @@ function updateScreenShareButton(isSharing) {
             screenShareBtn.classList.add('active');
         } else {
             screenShareBtn.textContent = '🖥️';
-            screenShareBtn.title = 'Начать демонстрацию экрана';
+            screenShareBtn.title = 'Начать демонстрацию экрана (60-120 FPS)';
             screenShareBtn.classList.remove('active');
         }
     }
 }
 
 function endGlobalCall() {
+    // Останавливаем все звуки
+    if (typeof stopAllSounds === 'function') {
+        stopAllSounds();
+    }
+    if (typeof stopIncomingCallRing === 'function') {
+        stopIncomingCallRing();
+    }
+
     stopPingMeasurement();
+    stopQualityAdaptation();
+    stopFpsMeasurement();
     
     if (isScreenSharing) {
         stopScreenShare();
     }
     
-    // Скрываем демонстрацию экрана собеседника
     hideScreenShareInChat();
     isRemoteScreenSharing = false;
     screenShareManuallyClosed = false;
@@ -853,6 +1100,10 @@ function endGlobalCall() {
     window.currentCallPeerUsername = null;
     currentRemoteAudioElement = null;
     currentRemoteStream = null;
+    
+    currentQuality = 'high';
+    currentBitrate = 5000000;
+    lastFps = 60;
 }
 
 function showNotification(title, message) {
@@ -951,6 +1202,12 @@ function updatePingDisplay(ping) {
     pingValueSpan.textContent = `${ping} мс`;
     pingValueSpan.style.color = color;
     pingContainer.appendChild(pingValueSpan);
+    
+    // Обновляем отображение пинга в индикаторе качества
+    const pingDisplay = document.getElementById('localPingDisplay');
+    if (pingDisplay) {
+        pingDisplay.innerHTML = `⚡ Пинг: ${ping} ms`;
+    }
 }
 
 function showDiscordCallPanel() {
@@ -988,7 +1245,7 @@ function showDiscordCallPanel() {
                 </div>
             </div>
             <div class="discord-call-controls">
-                <button class="discord-control-btn" id="discordScreenShareBtn" title="Начать демонстрацию экрана">🖥️</button>
+                <button class="discord-control-btn" id="discordScreenShareBtn" title="Начать демонстрацию экрана (60-120 FPS, аудио)">🖥️</button>
                 <button class="discord-control-btn" id="discordMuteBtn" title="Отключить микрофон">🎤</button>
                 <button class="discord-control-btn" id="discordSpeakerBtn" title="Отключить звук собеседника">🔊</button>
                 <button class="discord-control-btn discord-end-call" id="discordEndCallBtn" title="Завершить звонок">📞</button>
@@ -1120,4 +1377,83 @@ function handleFriendContextMenu(e) {
     const friendId = parseInt(friendItem.dataset.friendId);
     const friendName = friendItem.querySelector('.friend-name')?.textContent || 'Друг';
     showVolumeSlider(e, friendId, friendName, 'friend');
+}
+
+function toggleMute() {
+    isMuted = !isMuted;
+    if (globalLocalStream) {
+        globalLocalStream.getAudioTracks().forEach(track => track.enabled = !isMuted);
+    }
+    const muteBtn = document.getElementById('muteBtn');
+    if (muteBtn) muteBtn.textContent = isMuted ? '🔇' : '🎤';
+    
+    const panelMuteBtn = document.getElementById('discordMuteBtn');
+    if (panelMuteBtn) panelMuteBtn.textContent = isMuted ? '🔇' : '🎤';
+}
+
+function toggleSpeaker() {
+    isSpeakerOff = !isSpeakerOff;
+    const audioElement = document.getElementById('globalRemoteAudio');
+    if (audioElement) audioElement.muted = isSpeakerOff;
+
+    const speakerBtn = document.getElementById('speakerBtn');
+    if (speakerBtn) speakerBtn.textContent = isSpeakerOff ? '🔇' : '🔊';
+    
+    const panelSpeakerBtn = document.getElementById('discordSpeakerBtn');
+    if (panelSpeakerBtn) panelSpeakerBtn.textContent = isSpeakerOff ? '🔇' : '🔊';
+}
+
+async function createAndSendOffer() {
+    if (!globalPeerConnection) {
+        createGlobalPeerConnection();
+    }
+    
+    if (globalLocalStream && globalPeerConnection.getSenders().length === 0) {
+        globalLocalStream.getTracks().forEach(track => {
+            globalPeerConnection.addTrack(track, globalLocalStream);
+        });
+    }
+
+    try {
+        const offer = await globalPeerConnection.createOffer();
+        await globalPeerConnection.setLocalDescription(offer);
+        
+        if (socket && globalCurrentCallId && hasAcceptedCall) {
+            socket.emit('webrtc_offer', {
+                target_user_id: currentChatId,
+                offer: offer,
+                call_id: globalCurrentCallId
+            });
+        }
+    } catch (err) {
+        console.error('Ошибка создания offer:', err);
+    }
+}
+
+async function handleRemoteOffer(data) {
+    if (!globalPeerConnection) {
+        createGlobalPeerConnection();
+    }
+    
+    if (globalLocalStream && globalPeerConnection.getSenders().length === 0) {
+        globalLocalStream.getTracks().forEach(track => {
+            globalPeerConnection.addTrack(track, globalLocalStream);
+        });
+    }
+
+    try {
+        await globalPeerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await globalPeerConnection.createAnswer();
+        await globalPeerConnection.setLocalDescription(answer);
+        
+        if (socket && hasAcceptedCall) {
+            socket.emit('webrtc_answer', {
+                caller_id: data.caller_id,
+                answer: answer,
+                call_id: globalCurrentCallId
+            });
+        }
+    } catch (err) {
+        console.error('Ошибка обработки offer:', err);
+    }
 }
