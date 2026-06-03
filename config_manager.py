@@ -56,9 +56,9 @@ def create_config():
                 app_port = 5000
             else:
                 app_port = int(app_port)
-            if 1024 <= app_port <= 65535 or app_port == 5000:
+            if 400 <= app_port <= 65535 or app_port == 5000:
                 break
-            print("❌ Порт должен быть от 1024 до 65535")
+            print("❌ Порт должен быть от 400 до 65535")
         except ValueError:
             print("❌ Введите число!")
     
