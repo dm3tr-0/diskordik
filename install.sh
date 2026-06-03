@@ -32,7 +32,8 @@ get_server_ip() {
     echo -e "${YELLOW}Определение IP адреса сервера...${NC}"
     echo -e "${GREEN}Внешний IP сервера: ${default_ip}${NC}"
     echo ""
-    read -p "$(echo -e ${YELLOW}Введите IP адрес для доступа к серверу (Enter для ${default_ip}): ${NC})" ip
+    echo -e "${YELLOW}Введите IP адрес для доступа к серверу (Enter для ${default_ip}): ${NC}"
+    read ip
     
     if [ -z "$ip" ]; then
         ip=$default_ip
@@ -53,14 +54,15 @@ get_port() {
     local default_port=$2
     local port
     
-    read -p "$(echo -e ${YELLOW}Введите порт для $port_name (Enter для $default_port): ${NC})" port
+    echo -e "${YELLOW}Введите порт для $port_name (Enter для $default_port): ${NC}"
+    read port
     
     if [ -z "$port" ]; then
         port=$default_port
     fi
     
     # Проверка порта
-    if [[ $port =~ ^[0-9]+$ ]] && [ $port -ge 1024 ] && [ $port -le 65535 ]; then
+    if [[ $port =~ ^[0-9]+$ ]] && [ $port -ge 400 ] && [ $port -le 65535 ]; then
         echo "$port"
     else
         echo -e "${RED}Неверный порт. Использую $default_port${NC}" >&2
@@ -129,13 +131,19 @@ if [ ! -d "$HOME/.pyenv" ]; then
     curl -s https://pyenv.run | bash
 fi
 
-export PATH="$HOME/.pyenv/bin:$PATH"
-eval "$(pyenv init --path)" 2>/dev/null
-eval "$(pyenv virtualenv-init -)" 2>/dev/null
+# Настройка pyenv для текущей сессии
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)" 2>/dev/null || true
+eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
 
-if ! grep -q "pyenv" ~/.bashrc; then
-    echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> ~/.bashrc
-    echo 'eval "$(pyenv init --path)"' >> ~/.bashrc
+# Добавление в .bashrc если еще не добавлено
+if ! grep -q "pyenv" ~/.bashrc 2>/dev/null; then
+    echo '' >> ~/.bashrc
+    echo '# Pyenv configuration' >> ~/.bashrc
+    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+    echo 'eval "$(pyenv init -)"' >> ~/.bashrc
     echo 'eval "$(pyenv virtualenv-init -)"' >> ~/.bashrc
 fi
 
@@ -157,10 +165,15 @@ source venv/bin/activate
 
 echo -e "${BLUE}[6/8] Установка Python пакетов...${NC}"
 pip install --upgrade pip -q
-pip install -q -r requirements.txt
+if [ -f "requirements.txt" ]; then
+    pip install -q -r requirements.txt
+else
+    echo -e "${YELLOW}⚠️ Файл requirements.txt не найден, устанавливаю базовые пакеты...${NC}"
+    pip install -q flask flask-socketio eventlet python-engineio python-socketio
+fi
 
 echo -e "${BLUE}[7/8] Настройка конфигурации...${NC}"
-# Запрос параметров у пользователя (сохраняем в глобальные переменные)
+# Запрос параметров у пользователя
 SERVER_IP=$(get_server_ip)
 APP_PORT=$(get_port "веб-сервера" 5000)
 STUN_PORT=$(get_port "STUN сервера" 3478)
@@ -182,6 +195,13 @@ else
     echo -e "${RED}⚠️ Возникли проблемы при запуске. Проверьте логи:${NC}"
     echo -e "${YELLOW}   sudo journalctl -u discord-clone -n 50${NC}"
 fi
+
+# Открытие портов в firewall
+echo -e "${YELLOW}Открываем порты в firewall...${NC}"
+sudo ufw allow ${APP_PORT}/tcp 2>/dev/null || true
+sudo ufw allow ${STUN_PORT}/udp 2>/dev/null || true
+echo -e "${GREEN}✅ Порты ${APP_PORT}/tcp и ${STUN_PORT}/udp открыты${NC}"
+echo ""
 
 # Вывод информации
 echo -e "${GREEN}"
@@ -208,13 +228,6 @@ echo -e "   • Запуск:   ${YELLOW}sudo systemctl start discord-clone${NC}
 echo -e "   • Останов:  ${YELLOW}sudo systemctl stop discord-clone${NC}"
 echo -e "   • Логи:     ${YELLOW}sudo journalctl -u discord-clone -f${NC}"
 echo -e "   • Перезапуск: ${YELLOW}sudo systemctl restart discord-clone${NC}"
-echo ""
-
-# Открытие портов в firewall
-echo -e "${YELLOW}Открываем порты в firewall...${NC}"
-sudo ufw allow ${APP_PORT}/tcp
-sudo ufw allow ${STUN_PORT}/udp
-echo -e "${GREEN}✅ Порты ${APP_PORT}/tcp и ${STUN_PORT}/udp открыты${NC}"
 echo ""
 
 echo -e "${GREEN}🎉 Установка завершена! Откройте в браузере: http://${SERVER_IP}:${APP_PORT}${NC}"
