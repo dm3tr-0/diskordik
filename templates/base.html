@@ -10,6 +10,9 @@
         console.log("STUN URL:", window.STUN_URL);
     </script>
     <script src="{{ url_for('static', filename='socket.js') }}"></script>
+    <script src="{{ url_for('static', filename='icons.js') }}"></script>
+    <script src="{{ url_for('static', filename='e2e.js') }}"></script>
+    <script src="{{ url_for('static', filename='message-cache.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     {% block extra_head %}{% endblock %}
@@ -86,11 +89,6 @@
         </div>
     </div>
 
-    <!-- Простая кнопка включения/выключения звуков -->
-    <button id="soundToggleBtn" class="sound-toggle-btn" onclick="toggleSound()" title="Вкл/Выкл звуки">
-        🔊
-    </button>
-
     <div class="{% if request.endpoint in ['login', 'register'] %}auth-page{% else %}app-container{% endif %}">
         {% block content %}{% endblock %}
     </div>
@@ -115,12 +113,14 @@
         localStorage.setItem('soundEnabled', soundEnabled);
     }
 
-    // Обновить внешний вид кнопки
+    // Обновить внешний вид кнопки (теперь в нижней панели пользователя)
     function updateSoundButton() {
-        const btn = document.getElementById('soundToggleBtn');
+        const btn = document.getElementById('panelSoundBtn');
         if (btn) {
-            btn.textContent = soundEnabled ? '🔊' : '🔇';
-            btn.title = soundEnabled ? 'Выключить звуки' : 'Включить звуки';
+            btn.classList.toggle('active', !soundEnabled);
+            const ic = btn.querySelector('.ic-sound');
+            if (ic) ic.innerHTML = window.icon(soundEnabled ? 'bell' : 'bellOff', 20);
+            btn.title = soundEnabled ? 'Выключить звуки уведомлений' : 'Включить звуки уведомлений';
         }
     }
 

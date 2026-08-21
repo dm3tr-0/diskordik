@@ -41,15 +41,26 @@ class STUNServer:
         self.running = False
         
     def start(self):
-        self.sock.bind((self.host, self.port))
+        # Безопасный bind: если порт занят / нет прав / адрес не назначен
+        # (например, публичный IP за NAT) — не валить всё приложение, а лишь
+        # залогировать предупреждение и выйти из потока чисто.
+        try:
+            self.sock.bind((self.host, self.port))
+        except OSError as e:
+            print(f"⚠️  STUN: не удалось привязаться к {self.host}:{self.port} — {e}")
+            print(f"⚠️  STUN сервер отключён. WebRTC звонки могут не работать через NAT,")
+            print(f"     но мессенджер продолжит работу.")
+            self.running = False
+            return
+
         self.running = True
         print(f"🚀 STUN Server running on {self.host}:{self.port}")
-        
+
         while self.running:
             try:
                 data, addr = self.sock.recvfrom(2048)
                 # Запускаем обработку в отдельном потоке
-                threading.Thread(target=self.handle_request, args=(data, addr)).start()
+                threading.Thread(target=self.handle_request, args=(data, addr), daemon=True).start()
             except Exception as e:
                 if self.running:
                     print(f"STUN error: {e}")

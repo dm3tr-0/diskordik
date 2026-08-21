@@ -1245,10 +1245,10 @@ function showDiscordCallPanel() {
                 </div>
             </div>
             <div class="discord-call-controls">
-                <button class="discord-control-btn" id="discordScreenShareBtn" title="Начать демонстрацию экрана (60-120 FPS, аудио)">🖥️</button>
-                <button class="discord-control-btn" id="discordMuteBtn" title="Отключить микрофон">🎤</button>
-                <button class="discord-control-btn" id="discordSpeakerBtn" title="Отключить звук собеседника">🔊</button>
-                <button class="discord-control-btn discord-end-call" id="discordEndCallBtn" title="Завершить звонок">📞</button>
+                <button class="discord-control-btn" id="discordScreenShareBtn" title="Демонстрация экрана">${window.icon('monitor',20)}</button>
+                <button class="discord-control-btn" id="discordMuteBtn" title="Микрофон">${window.icon('mic',20)}</button>
+                <button class="discord-control-btn" id="discordSpeakerBtn" title="Наушники">${window.icon('headphones',20)}</button>
+                <button class="discord-control-btn discord-end-call" id="discordEndCallBtn" title="Завершить звонок">${window.icon('phoneOff',20)}</button>
             </div>
         </div>
     `;
@@ -1258,11 +1258,11 @@ function showDiscordCallPanel() {
     document.getElementById('discordScreenShareBtn')?.addEventListener('click', startScreenShare);
     document.getElementById('discordMuteBtn')?.addEventListener('click', () => {
         toggleMute();
-        document.getElementById('discordMuteBtn').textContent = isMuted ? '🔇' : '🎤';
+        document.getElementById('discordMuteBtn').innerHTML = window.icon(isMuted ? 'micOff' : 'mic', 20);
     });
     document.getElementById('discordSpeakerBtn')?.addEventListener('click', () => {
         toggleSpeaker();
-        document.getElementById('discordSpeakerBtn').textContent = isSpeakerOff ? '🔇' : '🔊';
+        document.getElementById('discordSpeakerBtn').innerHTML = window.icon(isSpeakerOff ? 'headphonesOff' : 'headphones', 20);
     });
     document.getElementById('discordEndCallBtn')?.addEventListener('click', endGlobalCall);
     document.getElementById('discordPeerUser')?.addEventListener('contextmenu', (e) => {
@@ -1385,10 +1385,18 @@ function toggleMute() {
         globalLocalStream.getAudioTracks().forEach(track => track.enabled = !isMuted);
     }
     const muteBtn = document.getElementById('muteBtn');
-    if (muteBtn) muteBtn.textContent = isMuted ? '🔇' : '🎤';
+    if (muteBtn) muteBtn.innerHTML = window.icon(isMuted ? 'micOff' : 'mic', 20);
     
     const panelMuteBtn = document.getElementById('discordMuteBtn');
-    if (panelMuteBtn) panelMuteBtn.textContent = isMuted ? '🔇' : '🎤';
+    if (panelMuteBtn) panelMuteBtn.innerHTML = window.icon(isMuted ? 'micOff' : 'mic', 20);
+
+    // Нижняя панель пользователя (всегда видна на дашборде)
+    const userPanelMute = document.getElementById('panelMuteBtn');
+    if (userPanelMute) {
+        userPanelMute.classList.toggle('active', isMuted);
+        const ic = userPanelMute.querySelector('.ic-mic');
+        if (ic) ic.innerHTML = window.icon(isMuted ? 'micOff' : 'mic', 20);
+    }
 }
 
 function toggleSpeaker() {
@@ -1397,10 +1405,18 @@ function toggleSpeaker() {
     if (audioElement) audioElement.muted = isSpeakerOff;
 
     const speakerBtn = document.getElementById('speakerBtn');
-    if (speakerBtn) speakerBtn.textContent = isSpeakerOff ? '🔇' : '🔊';
+    if (speakerBtn) speakerBtn.innerHTML = window.icon(isSpeakerOff ? 'headphonesOff' : 'headphones', 20);
     
     const panelSpeakerBtn = document.getElementById('discordSpeakerBtn');
-    if (panelSpeakerBtn) panelSpeakerBtn.textContent = isSpeakerOff ? '🔇' : '🔊';
+    if (panelSpeakerBtn) panelSpeakerBtn.innerHTML = window.icon(isSpeakerOff ? 'headphonesOff' : 'headphones', 20);
+
+    // Нижняя панель пользователя
+    const userPanelDeafen = document.getElementById('panelDeafenBtn');
+    if (userPanelDeafen) {
+        userPanelDeafen.classList.toggle('active', isSpeakerOff);
+        const ic = userPanelDeafen.querySelector('.ic-headphones');
+        if (ic) ic.innerHTML = window.icon(isSpeakerOff ? 'headphonesOff' : 'headphones', 20);
+    }
 }
 
 async function createAndSendOffer() {
