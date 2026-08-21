@@ -4,7 +4,7 @@ Self-hosted мессенджер в стиле Discord: текстовые со�
 
 > **Стек:** Python 3.10+ · Flask · Flask-SocketIO · SQLAlchemy/SQLite · WebRTC · vanilla JS + Web Crypto API
 
-<img width="1280" height="800" alt="shot-final-typing" src="https://github.com/user-attachments/assets/1067190f-d62d-4bd0-ba96-3633ab9d46a6" />
+<img width="640" height="400" alt="shot-final-typing" src="https://github.com/user-attachments/assets/1067190f-d62d-4bd0-ba96-3633ab9d46a6" />
 ---
 
 ## Содержание
