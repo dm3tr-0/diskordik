@@ -79,7 +79,6 @@ diskordik/
 ├── install.sh             # Автоматический установщик для Linux-сервера
 ├── requirements.txt       # Python-зависимости
 ├── README.md              # Краткое описание
-├── Documentation.md       # Этот файл
 │
 ├── templates/             # Jinja2-шаблоны
 │   ├── base.html          # Базовый каркас: flash, звуки, модалки, JS-инициализация
