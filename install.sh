@@ -364,7 +364,7 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 
 echo -e "${BLUE}Информация:${NC}"
-echo -e "   📍 Рекламный IP: ${GREEN}${SERVER_IP}${NC}"
+echo -e "   📍  IP: ${GREEN}${SERVER_IP}${NC}"
 echo -e "   🌐 HTTP порт:    ${GREEN}${APP_PORT}${NC}"
 echo -e "   🔌 STUN порт:    ${GREEN}${STUN_PORT}${NC}"
 echo -e "   📁 Директория:   ${GREEN}${INSTALL_DIR}${NC}"
