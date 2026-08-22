@@ -3,7 +3,7 @@
 Self-hosted мессенджер в стиле Discord: текстовые сообщения с E2E-шифрованием, голосовые звонки и демонстрация экрана через WebRTC.
 
 > **Стек:** Python 3.10+ · Flask · Flask-SocketIO · SQLAlchemy/SQLite · WebRTC · vanilla JS + Web Crypto API
-
+> бета-тест: https://chat.dm3tr0.ru:5000/
 <img width="640" height="400" alt="shot-final-typing" src="https://github.com/user-attachments/assets/1067190f-d62d-4bd0-ba96-3633ab9d46a6" />
 
 ---
