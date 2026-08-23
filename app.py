@@ -799,6 +799,7 @@ def main():
     Thread(target=start_stun_server, daemon=True).start()
 
     force_http = os.environ.get('DISCORDIK_NO_HTTPS', '0') == '1'
+    generate_self_signed_certificate()
 
     print("\n" + "=" * 60)
     print("Diskordik запущен!")
