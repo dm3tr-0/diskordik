@@ -341,6 +341,14 @@ def accept_friend_request(request_id):
 
     db.session.commit()
 
+    # Уведомляем отправителя заявки, что её приняли — чтобы он в реальном
+    # времени обновил список друзей (без перезагрузки страницы).
+    socketio.emit('friend_request_accepted', {
+        'friend_id': current_user.id,
+        'friend_name': current_user.username,
+        'is_online': current_user.is_online
+    }, room=f'user_{friend_request.from_user_id}')
+
     return jsonify({'success': True})
 
 
@@ -354,6 +362,11 @@ def reject_friend_request(request_id):
 
     friend_request.status = 'rejected'
     db.session.commit()
+
+    # Уведомляем отправителя, что заявку отклонили.
+    socketio.emit('friend_request_rejected', {
+        'by_user': current_user.username
+    }, room=f'user_{friend_request.from_user_id}')
 
     return jsonify({'success': True})
 
@@ -799,7 +812,6 @@ def main():
     Thread(target=start_stun_server, daemon=True).start()
 
     force_http = os.environ.get('DISCORDIK_NO_HTTPS', '0') == '1'
-    generate_self_signed_certificate()
 
     print("\n" + "=" * 60)
     print("Diskordik запущен!")

@@ -86,8 +86,7 @@ function setupCallSocketListeners() {
             isCallActive = true;
             hasAcceptedCall = false;
             
-            showGlobalCallWidget('outgoing');
-            updateCallWidgetStatus('Ожидание ответа...');
+            showOutgoingCallModal(window.currentCallPeerUsername || 'Собеседник');
         }
     });
 
@@ -98,6 +97,7 @@ function setupCallSocketListeners() {
             if (typeof stopIncomingCallRing === 'function') {
                 stopIncomingCallRing();
             }
+            closeOutgoingCallModal();
             hasAcceptedCall = true;
             updateCallWidgetStatus('Соединение...');
             createAndSendOffer();
@@ -113,6 +113,7 @@ function setupCallSocketListeners() {
             if (typeof stopIncomingCallRing === 'function') {
                 stopIncomingCallRing();
             }
+            closeOutgoingCallModal();
             updateCallWidgetStatus('Звонок отклонен');
             showNotification('Звонок отклонен', 'Пользователь отклонил вызов');
             setTimeout(() => endGlobalCall(), 2000);
@@ -126,6 +127,7 @@ function setupCallSocketListeners() {
             if (typeof stopIncomingCallRing === 'function') {
                 stopIncomingCallRing();
             }
+            closeOutgoingCallModal();
             updateCallWidgetStatus('Звонок завершен');
             if (hasAcceptedCall) {
                 showNotification('Звонок завершен', 'Собеседник завершил разговор');
@@ -190,6 +192,36 @@ function setupCallWidgetControls() {
     if (muteBtn) muteBtn.addEventListener('click', toggleMute);
     if (speakerBtn) speakerBtn.addEventListener('click', toggleSpeaker);
     if (endCallBtn) endCallBtn.addEventListener('click', endGlobalCall);
+}
+
+// ========== Модалка исходящего звонка ==========
+function showOutgoingCallModal(peerName) {
+    const modal = document.getElementById('outgoingCallModal');
+    if (!modal) return;
+    const nameEl = document.getElementById('outgoingCallName');
+    const statusEl = document.getElementById('outgoingCallStatus');
+    const avatarEl = document.getElementById('outgoingCallAvatar');
+    if (nameEl) nameEl.textContent = peerName;
+    if (statusEl) statusEl.textContent = 'Вызываю...';
+    if (avatarEl && peerName) avatarEl.textContent = peerName[0].toUpperCase();
+    modal.style.display = 'flex';
+    // Звук ожидания (гудки) — переиспользуем звук входящего звонка
+    if (typeof startIncomingCallRing === 'function') {
+        startIncomingCallRing();
+    }
+}
+
+function closeOutgoingCallModal() {
+    const modal = document.getElementById('outgoingCallModal');
+    if (modal) modal.style.display = 'none';
+    if (typeof stopIncomingCallRing === 'function') {
+        stopIncomingCallRing();
+    }
+}
+
+function cancelOutgoingCall() {
+    closeOutgoingCallModal();
+    endGlobalCall();
 }
 
 function showGlobalCallModal(data) {
@@ -329,8 +361,8 @@ function startCall(type) {
                 call_type: 'audio'
             });
 
-            showGlobalCallWidget('outgoing');
-            updateCallWidgetStatus('Ожидание ответа...');
+            // Модалка исходящего звонка покажется по событию call_initialized
+            showOutgoingCallModal(window.currentCallPeerUsername || 'Собеседник');
         })
         .catch(err => {
             console.error('Ошибка доступа к микрофону:', err);
@@ -1074,6 +1106,8 @@ function endGlobalCall() {
     
     const globalCallModal = document.getElementById('globalCallModal');
     if (globalCallModal) globalCallModal.style.display = 'none';
+
+    closeOutgoingCallModal();
     
     hideDiscordCallPanel();
     

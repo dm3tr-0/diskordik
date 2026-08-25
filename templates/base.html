@@ -89,6 +89,22 @@
         </div>
     </div>
 
+    <!-- Модальное окно исходящего звонка (показывается пока собеседник не ответил) -->
+    <div id="outgoingCallModal" class="call-modal-modern" style="display: none;">
+        <div class="call-modal-content">
+            <div class="call-modal-header">
+                <div class="caller-avatar">
+                    <div class="avatar-large" id="outgoingCallAvatar">📞</div>
+                </div>
+                <h3 id="outgoingCallName">Вызов...</h3>
+                <p id="outgoingCallStatus" class="call-status-text">Вызываю...</p>
+            </div>
+            <div class="call-modal-actions">
+                <button class="modal-reject-btn" onclick="cancelOutgoingCall()">Отменить</button>
+            </div>
+        </div>
+    </div>
+
     <div class="{% if request.endpoint in ['login', 'register'] %}auth-page{% else %}app-container{% endif %}">
         {% block content %}{% endblock %}
     </div>

@@ -987,7 +987,7 @@ button[data-icon],
 .send-btn,
 .discord-control-btn,
 .sidebar-header-action,
-.mobile-back-btn,
+.chat-back-btn,
 .mobile-back-sidebar,
 .mobile-menu-btn {
     line-height: 0;
@@ -1108,8 +1108,9 @@ button[data-icon],
     border-bottom: 1px solid var(--border);
 }
 
-.mobile-back-btn {
-    display: none;
+/* Кнопка «назад» в шапке чата — видна на всех экранах (десктоп + мобайл) */
+.chat-back-btn {
+    display: flex;
     width: 36px;
     height: 36px;
     border-radius: var(--radius-sm);
@@ -1117,9 +1118,10 @@ button[data-icon],
     justify-content: center;
     color: var(--interactive-normal);
     font-size: 18px;
+    flex-shrink: 0;
     transition: background var(--transition), color var(--transition);
 }
-.mobile-back-btn:hover {
+.chat-back-btn:hover {
     background: var(--bg-hover);
     color: var(--interactive-hover);
 }
@@ -2250,9 +2252,6 @@ button[data-icon],
         min-height: 0;
     }
 
-    .mobile-back-btn {
-        display: flex;
-    }
     .mobile-back-sidebar {
         display: flex;
     }

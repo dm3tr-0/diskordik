@@ -141,7 +141,7 @@
             <div class="chat-container" id="chatContainer" style="display: none;">
                 <div class="chat-header">
                     <div class="chat-header-info">
-                        <button class="mobile-back-btn" onclick="closeChat()" title="Назад" data-icon="chevronLeft"></button>
+                        <button class="chat-back-btn" onclick="closeChat()" title="Назад к списку" data-icon="chevronLeft"></button>
                         <div class="chat-avatar">
                             <div class="avatar-medium" id="chatAvatar">?</div>
                             <span class="online-dot" id="chatStatusDot"></span>
@@ -313,6 +313,19 @@ function setupSocketListeners() {
     socket.on('friend_request_notification', (data) => {
         showNotification('Новая заявка в друзья', `Пользователь ${data.from_user} хочет добавить вас в друзья`);
         loadFriendRequests();
+    });
+
+    // Мою заявку приняли в друзья — обновляю список в реальном времени
+    socket.on('friend_request_accepted', (data) => {
+        loadFriendsList();
+        loadFriendRequests();
+        showNotification('Заявка принята', `${data.friend_name} теперь в списке друзей`);
+    });
+
+    // Мою заявку отклонили
+    socket.on('friend_request_rejected', (data) => {
+        loadFriendRequests();
+        showNotification('Заявка отклонена', `${data.by_user} отклонил(а) вашу заявку`);
     });
 }
 
