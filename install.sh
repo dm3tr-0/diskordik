@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Discord Clone — install.sh
+# Discordik — install.sh
 # Однострочный установщик для сервера.
 #
 # Использование:
@@ -11,13 +11,12 @@
 #        bash install.sh
 #
 # Переменные окружения (необязательно, для полностью неинтерактивной установки):
-#   SERVER_IP   — рекламный/внешний IP сервера (default: автоопределение через ifconfig.me)
+#   SERVER_IP   — внешний IP сервера (default: автоопределение через ifconfig.me)
 #   APP_PORT    — порт веб-сервера (default: 5000)
 #   STUN_PORT   — порт STUN сервера (default: 3478)
 #   DISCORDIK_INSTALL_DIR — каталог установки (default: ./diskordik в текущей директории)
 
-set -e  # Остановка при ошибке (но read-ы обёрнуты безопасно — см. ниже)
-
+set -e  # Остановка при ошибке
 # ──────────────────────────────────────────────────────────────────────────────
 # Цвета
 # ──────────────────────────────────────────────────────────────────────────────
@@ -364,14 +363,14 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 
 echo -e "${BLUE}Информация:${NC}"
-echo -e "   📍 Рекламный IP: ${GREEN}${SERVER_IP}${NC}"
+echo -e "   📍  IP: ${GREEN}${SERVER_IP}${NC}"
 echo -e "   🌐 HTTP порт:    ${GREEN}${APP_PORT}${NC}"
 echo -e "   🔌 STUN порт:    ${GREEN}${STUN_PORT}${NC}"
 echo -e "   📁 Директория:   ${GREEN}${INSTALL_DIR}${NC}"
 echo ""
 echo -e "${BLUE}Доступные адреса:${NC}"
-echo -e "   • ${GREEN}http://${SERVER_IP}:${APP_PORT}${NC}"
-echo -e "   • (локально) ${GREEN}http://127.0.0.1:${APP_PORT}${NC}"
+echo -e "   • ${GREEN}https://${SERVER_IP}:${APP_PORT}${NC}"
+echo -e "   • (локально) ${GREEN}https://127.0.0.1:${APP_PORT}${NC}"
 echo ""
 
 echo -e "${BLUE}Управление сервисом:${NC}"
@@ -382,4 +381,4 @@ echo -e "   • Логи:      ${YELLOW}sudo journalctl -u discord-clone -f${NC}
 echo -e "   • Перезапуск:${YELLOW}sudo systemctl restart discord-clone${NC}"
 echo ""
 
-echo -e "${GREEN}🎉 Установка завершена! Откройте в браузере: http://${SERVER_IP}:${APP_PORT}${NC}"
+echo -e "${GREEN}🎉 Установка завершена! Откройте в браузере: https://${SERVER_IP}:${APP_PORT}${NC}"
